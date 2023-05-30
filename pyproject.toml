@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "pydantic-zarr"
+version = "0.1.0"
+description = ""
+authors = ["Davis Vann Bennett <davis.v.bennett@gmail.com>"]
+readme = "README.md"
+packages = [{include = "pydantic_zarr", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+zarr = "^2.14.2"
+pydantic = "^1.10.8"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.3.1"
+pytest-cov = "^4.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
