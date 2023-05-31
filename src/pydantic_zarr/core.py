@@ -3,13 +3,10 @@ from __future__ import annotations
 from typing import (
     Any,
     Generic,
-    Iterable,
     Literal,
     Optional,
     TypeVar,
     Union,
-    Protocol,
-    runtime_checkable,
 )
 
 from pydantic.generics import GenericModel
@@ -18,6 +15,7 @@ import zarr
 import os
 
 TAttrs = TypeVar("TAttrs", bound=dict[str, Any])
+TChild = TypeVar("TChild", bound=Union["ArraySpec", "GroupSpec"])
 
 DimensionSeparator = Union[Literal["."], Literal["/"]]
 ZarrVersion = Union[Literal[2], Literal[3]]
@@ -45,86 +43,76 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
     compressor: Optional[dict[str, Any]] = None
 
     @classmethod
-    def from_array(
-        cls,
-        data: ArrayLike,
-        chunks,
-        fill_value=0,
-        order="C",
-        filters={},
-        dimension_separator="/",
-        compressor=None,
-        attrs={},
-    ):
-        """
-        Generate an ArraySpec from an arraylike object
-        """
+    def from_zarr(cls, zarray: zarr.Array):
         return cls(
-            shape=data.shape,
-            dtype=data.dtype,
-            chunks=chunks,
-            fill_value=fill_value,
-            order=order,
-            filters=filters,
-            dimension_separator=dimension_separator,
-            compressor=compressor,
-            attrs=attrs,
+            shape=zarray.shape,
+            chunks=zarray.chunks,
+            dtype=zarray.dtype,
+            fill_value=zarray.fill_value,
+            order=zarray.order,
+            filters=zarray.filters,
+            dimension_separator=zarray._dimension_separator,
+            compressor=zarray.compressor,
         )
 
-
-TChild = TypeVar("TChild", bound=Union["ArraySpec", "GroupSpec"])
+    def to_zarr(self, store, path) -> zarr.Array:
+        spec_dict = self.dict()
+        attrs = spec_dict.pop("attrs")
+        result = zarr.create(store=store, path=path, **spec_dict)
+        result.attrs.put(attrs)
+        return result
 
 
 class GroupSpec(NodeSpec, Generic[TAttrs, TChild]):
-    children: dict[str, TChild] = {}
+    items: dict[str, TChild] = {}
+
+    @classmethod
+    def from_zarr(cls, zgroup: zarr.Group):
+        items = {}
+        for name, item in zgroup.items():
+            if isinstance(item, zarr.Array):
+                _item = ArraySpec.from_zarr(item)
+            elif isinstance(item, zarr.Group):
+                _item = cls.from_zarr(item)
+            items[name] = _item
+
+        result = GroupSpec(attrs=dict(zgroup.attrs), items=items)
+        return result
+
+    def to_zarr(self, store: BaseStore, path: str):
+        spec_dict = self.dict()
+        # pop items because it's not a valid kwarg for init_group
+        spec_dict.pop("items")
+        # pop attrs because it's not a valid kwarg for init_group
+        attrs = spec_dict.pop("attrs")
+        # needing to call init_group, then zarr.group is not ergonomic
+        init_group(store=store, path=path)
+        result = zarr.group(store=store, path=path, **spec_dict)
+        result.attrs.put(attrs)
+        for name, item in self.items.items():
+            subpath = os.path.join(path, name)
+            item.to_zarr(store, subpath)
+        return result
 
 
-@runtime_checkable
-class NodeLike(Protocol):
-    basename: str
-    attrs: dict[str, Any]
-
-
-@runtime_checkable
-class ArrayLike(NodeLike, Protocol):
-    attrs: dict[str, Any]
-    fill_value: Any
-    chunks: tuple[int, ...]
-    shape: tuple[int, ...]
-    dtype: str
-
-
-@runtime_checkable
-class GroupLike(NodeLike, Protocol):
-    def values(self) -> Iterable[Union[GroupLike, ArrayLike]]:
-        """
-        Iterable of the children of this group
-        """
-        ...
-
-
-def to_spec(element: NodeLike) -> tuple(str, Union[ArraySpec, GroupSpec]):
+def to_spec(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupSpec]:
     """
     Recursively parse a Zarr group or Zarr array into an ArraySpec or GroupSpec.
     """
 
-    if isinstance(element, ArrayLike):
-        result = (
-            element.basename,
-            ArraySpec(
-                shape=element.shape,
-                dtype=str(element.dtype),
-                attrs=dict(element.attrs),
-                chunks=element.chunks,
-                fill_value=element.fill_value,
-            ),
-        )
-    elif isinstance(element, GroupLike):
-        children = tuple(map(to_spec, element.values()))
-        result = (
-            element.basename,
-            GroupSpec(attrs=dict(element.attrs), children=children),
-        )
+    if isinstance(element, zarr.Array):
+        result = ArraySpec.from_zarr(element)
+    elif isinstance(element, zarr.Group):
+        items = {}
+        for name, item in element.items():
+            if isinstance(item, zarr.Array):
+                _item = ArraySpec.from_zarr(item)
+            elif isinstance(item, zarr.Group):
+                _item = GroupSpec.from_zarr(item)
+            items[name] = _item
+
+        result = GroupSpec(attrs=dict(element.attrs), items=items)
+        return result
     else:
         msg = f"""
         Object of type {type(element)} cannot be processed by this function. 
@@ -143,22 +131,9 @@ def from_spec(
     GroupSpec.
     """
     if isinstance(spec, ArraySpec):
-        spec_dict = spec.dict()
-        attrs = spec_dict.pop("attrs")
-        result: zarr.Array = zarr.create(store=store, path=path, **spec_dict)
-        result.attrs.put(attrs)
-
+        result = spec.to_zarr(store, path)
     elif isinstance(spec, GroupSpec):
-        spec_dict = spec.dict()
-        spec_dict.pop("children")
-        attrs = spec_dict.pop("attrs")
-        # needing to call init_group, then zarr.group is not ergonomic
-        init_group(store=store, path=path)
-        result = zarr.group(store=store, path=path, **spec_dict)
-        result.attrs.put(attrs)
-        for name, child in spec.children.items():
-            subpath = os.path.join(path, name)
-            from_spec(store, subpath, child)
+        result = spec.to_zarr(store, path)
     else:
         msg = f"""
         Invalid argument for spec. Expected an instance of GroupSpec or ArraySpec, got

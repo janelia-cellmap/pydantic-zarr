@@ -41,6 +41,5 @@ def test_serde():
     group = from_spec(store, "/group_a", spec)
 
     # parse the spec from that group
-    name, observed = to_spec(group)
-    assert name == "group_a"
+    observed = to_spec(group)
     assert observed == spec
