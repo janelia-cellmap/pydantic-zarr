@@ -72,6 +72,9 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
         if filters is not None:
             filters = [f.get_config() for f in filters]
 
+        compressor = zarray.compressor
+        if compressor is not None:
+            compressor = compressor.get_config()
         return cls(
             shape=zarray.shape,
             chunks=zarray.chunks,
@@ -80,11 +83,11 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
             order=zarray.order,
             filters=filters,
             dimension_separator=zarray._dimension_separator,
-            compressor=zarray.compressor.get_config(),
+            compressor=compressor,
             attrs=dict(zarray.attrs),
         )
 
-    def to_zarr(self, store, path) -> zarr.Array:
+    def to_zarr(self, store: BaseStore, path: str) -> zarr.Array:
         """
         Serialize an ArraySpec to a zarr array at a specific path in a zarr store.
 
@@ -103,8 +106,9 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
         """
         spec_dict = self.dict()
         attrs = spec_dict.pop("attrs")
-        spec_dict["compressor"] = numcodecs.get_codec(spec_dict["compressor"])
-        if spec_dict["filters"] is not None:
+        if self.compressor is not None:
+            spec_dict["compressor"] = numcodecs.get_codec(spec_dict["compressor"])
+        if self.filters is not None:
             spec_dict["filters"] = [
                 numcodecs.get_codec(f) for f in spec_dict["filters"]
             ]
@@ -140,6 +144,12 @@ class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
                 _item = ArraySpec.from_zarr(item)
             elif isinstance(item, zarr.Group):
                 _item = cls.from_zarr(item)
+            else:
+                f"""
+                Unparseable object encountered: {type(item)}. Expected zarr.Array or
+                zarr.Group.
+                """
+                raise ValueError()
             items[name] = _item
 
         result = GroupSpec(attrs=dict(zgroup.attrs), items=items)

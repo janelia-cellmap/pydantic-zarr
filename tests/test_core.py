@@ -9,7 +9,7 @@ from pydantic_zarr.core import ArraySpec, GroupSpec, to_zarr, from_zarr
 @pytest.mark.parametrize("order", ("C", "F"))
 @pytest.mark.parametrize("dtype", ("bool", "uint8", "float64"))
 @pytest.mark.parametrize("dimension_separator", (".", "/"))
-@pytest.mark.parametrize("compressor", (numcodecs.LZMA(), numcodecs.GZip()))
+@pytest.mark.parametrize("compressor", (None, numcodecs.LZMA(), numcodecs.GZip()))
 @pytest.mark.parametrize(
     "filters", (None, ("delta",), ("scale_offset",), ("delta", "scale_offset"))
 )
@@ -51,7 +51,7 @@ def test_array_spec(
     assert spec.dtype == array.dtype
     assert spec.attrs == array.attrs
     assert spec.chunks == array.chunks
-    assert spec.compressor == array.compressor.get_config()
+
     assert spec.dimension_separator == array._dimension_separator
     assert spec.shape == array.shape
     assert spec.fill_value == array.fill_value
@@ -61,6 +61,12 @@ def test_array_spec(
         assert spec.filters == [f.get_config() for f in array.filters]
     else:
         assert spec.filters == array.filters
+
+    if array.compressor is not None:
+        assert spec.compressor == array.compressor.get_config()
+    else:
+        assert spec.compressor == array.compressor
+
     assert spec.order == array.order
 
     array2 = spec.to_zarr(store, "foo2")
@@ -69,7 +75,17 @@ def test_array_spec(
     assert spec.dtype == array2.dtype
     assert spec.attrs == array2.attrs
     assert spec.chunks == array2.chunks
-    assert spec.compressor == array2.compressor.get_config()
+
+    if array2.compressor is not None:
+        assert spec.compressor == array2.compressor.get_config()
+    else:
+        assert spec.compressor == array2.compressor
+
+    if array2.filters is not None:
+        assert spec.filters == [f.get_config() for f in array2.filters]
+    else:
+        assert spec.filters == array2.filters
+
     assert spec.dimension_separator == array2._dimension_separator
     assert spec.shape == array2.shape
     assert spec.fill_value == array2.fill_value
