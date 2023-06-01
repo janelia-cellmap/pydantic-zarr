@@ -15,7 +15,7 @@ import zarr
 import os
 
 TAttrs = TypeVar("TAttrs", bound=dict[str, Any])
-TChild = TypeVar("TChild", bound=Union["ArraySpec", "GroupSpec"])
+TItem = TypeVar("TItem", bound=Union["ArraySpec", "GroupSpec"])
 
 DimensionSeparator = Union[Literal["."], Literal["/"]]
 ZarrVersion = Union[Literal[2], Literal[3]]
@@ -24,7 +24,7 @@ ArrayOrder = Union[Literal["C"], Literal["F"]]
 
 class NodeSpec(GenericModel, Generic[TAttrs]):
     zarr_version: ZarrVersion = 2
-    attrs: TAttrs = {}
+    attrs: TAttrs
 
 
 class ArraySpec(NodeSpec, Generic[TAttrs]):
@@ -38,21 +38,27 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
     dtype: str
     fill_value: Union[None, int, float] = 0
     order: ArrayOrder = "C"
-    filters: dict[str, Any] = {}
+    filters: Optional[list[dict[str, Any]]] = None
     dimension_separator: DimensionSeparator = "/"
     compressor: Optional[dict[str, Any]] = None
 
     @classmethod
     def from_zarr(cls, zarray: zarr.Array):
+
+        filters = zarray.filters
+        if filters is not None:
+            filters = [f.get_config() for f in filters]
+
         return cls(
             shape=zarray.shape,
             chunks=zarray.chunks,
-            dtype=zarray.dtype,
+            dtype=str(zarray.dtype),
             fill_value=zarray.fill_value,
             order=zarray.order,
-            filters=zarray.filters,
+            filters=filters,
             dimension_separator=zarray._dimension_separator,
-            compressor=zarray.compressor,
+            compressor=zarray.compressor.get_config(),
+            attrs=dict(zarray.attrs),
         )
 
     def to_zarr(self, store, path) -> zarr.Array:
@@ -63,11 +69,12 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
         return result
 
 
-class GroupSpec(NodeSpec, Generic[TAttrs, TChild]):
-    items: dict[str, TChild] = {}
+class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
+    items: dict[str, TItem] = {}
 
     @classmethod
-    def from_zarr(cls, zgroup: zarr.Group):
+    def from_zarr(cls, zgroup: zarr.Group) -> "GroupSpec":
+        result: GroupSpec
         items = {}
         for name, item in zgroup.items():
             if isinstance(item, zarr.Array):
