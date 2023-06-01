@@ -2,7 +2,7 @@ import pytest
 import zarr
 from typing import Any, TypedDict
 import numcodecs
-from pydantic_zarr.core import ArraySpec, GroupSpec, from_spec, to_spec
+from pydantic_zarr.core import ArraySpec, GroupSpec, to_zarr, from_zarr
 
 
 @pytest.mark.parametrize("chunks", ((1,), (1, 2), ((1, 2, 3))))
@@ -63,6 +63,17 @@ def test_array_spec(
         assert spec.filters == array.filters
     assert spec.order == array.order
 
+    array2 = spec.to_zarr(store, "foo2")
+
+    assert spec.zarr_version == array2._version
+    assert spec.dtype == array2.dtype
+    assert spec.attrs == array2.attrs
+    assert spec.chunks == array2.chunks
+    assert spec.compressor == array2.compressor.get_config()
+    assert spec.dimension_separator == array2._dimension_separator
+    assert spec.shape == array2.shape
+    assert spec.fill_value == array2.fill_value
+
 
 @pytest.mark.parametrize("chunks", ((1,), (1, 2), ((1, 2, 3))))
 @pytest.mark.parametrize("order", ("C", "F"))
@@ -109,7 +120,7 @@ def test_serde(
 
     spec = GroupSpec(
         attrs=RootAttrs(foo=10, bar=[0, 1, 2]),
-        children={
+        items={
             "s0": ArraySpec(
                 shape=(10,) * len(chunks),
                 chunks=chunks,
@@ -135,8 +146,8 @@ def test_serde(
     )
 
     # materialize a zarr group, based on the spec
-    group = from_spec(store, "/group_a", spec)
+    group = to_zarr(spec, store, "/group_a")
 
     # parse the spec from that group
-    observed = to_spec(group)
+    observed = from_zarr(group)
     assert observed == spec

@@ -11,6 +11,7 @@ from typing import (
 
 from pydantic.generics import GenericModel
 from zarr.storage import init_group, BaseStore
+import numcodecs
 import zarr
 import os
 
@@ -102,6 +103,11 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
         """
         spec_dict = self.dict()
         attrs = spec_dict.pop("attrs")
+        spec_dict["compressor"] = numcodecs.get_codec(spec_dict["compressor"])
+        if spec_dict["filters"] is not None:
+            spec_dict["filters"] = [
+                numcodecs.get_codec(f) for f in spec_dict["filters"]
+            ]
         result = zarr.create(store=store, path=path, **spec_dict)
         result.attrs.put(attrs)
         return result
@@ -171,7 +177,7 @@ class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
         return result
 
 
-def to_spec(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupSpec]:
+def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupSpec]:
     """
     Recursively parse a Zarr group or Zarr array into an ArraySpec or GroupSpec.
 
@@ -208,7 +214,7 @@ def to_spec(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupSpe
     return result
 
 
-def from_spec(
+def to_zarr(
     spec: Union[ArraySpec, GroupSpec], store: BaseStore, path: str
 ) -> Union[zarr.Array, zarr.Group]:
     """
