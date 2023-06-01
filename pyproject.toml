@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "pydantic_zarr", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.9"
 zarr = "^2.14.2"
 pydantic = "^1.10.8"
 
