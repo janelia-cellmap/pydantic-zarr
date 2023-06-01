@@ -145,11 +145,11 @@ class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
             elif isinstance(item, zarr.Group):
                 _item = cls.from_zarr(item)
             else:
-                f"""
+                msg = f"""
                 Unparseable object encountered: {type(item)}. Expected zarr.Array or
                 zarr.Group.
                 """
-                raise ValueError()
+                raise ValueError(msg)
             items[name] = _item
 
         result = GroupSpec(attrs=dict(zgroup.attrs), items=items)
@@ -210,6 +210,12 @@ def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupS
                 _item = ArraySpec.from_zarr(item)
             elif isinstance(item, zarr.Group):
                 _item = GroupSpec.from_zarr(item)
+            else:
+                msg = f"""
+                Unparseable object encountered: {type(item)}. Expected zarr.Array or
+                zarr.Group.
+                """
+                raise ValueError(msg)
             items[name] = _item
 
         result = GroupSpec(attrs=dict(element.attrs), items=items)
