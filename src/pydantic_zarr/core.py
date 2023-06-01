@@ -23,14 +23,23 @@ ArrayOrder = Union[Literal["C"], Literal["F"]]
 
 
 class NodeSpec(GenericModel, Generic[TAttrs]):
+    """
+    The base class for ArraySpec and GroupSpec. Generic with respect to the type of
+    attrs.
+    """
+
     zarr_version: ZarrVersion = 2
     attrs: TAttrs
+
+    class Config:
+        extra = "forbid"
 
 
 class ArraySpec(NodeSpec, Generic[TAttrs]):
     """
-    This pydantic model represents the properties of a zarr array. It is generic
-    with respect to the type of attrs.
+    This pydantic model represents the structural properties of a zarr array.
+    It does not represent the data contained in the array. It is generic with respect to
+    to the type of attrs.
     """
 
     shape: tuple[int, ...]
@@ -44,6 +53,19 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
 
     @classmethod
     def from_zarr(cls, zarray: zarr.Array):
+        """
+        Create an ArraySpec from a zarr array.
+
+        Parameters
+        ----------
+        zarray : zarr array
+
+        Returns
+        -------
+        An instance of ArraySpec with properties derived from the provided zarr
+        array.
+
+        """
 
         filters = zarray.filters
         if filters is not None:
@@ -62,6 +84,22 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
         )
 
     def to_zarr(self, store, path) -> zarr.Array:
+        """
+        Serialize an ArraySpec to a zarr array at a specific path in a zarr store.
+
+        Parameters
+        ----------
+        store : instance of zarr.BaseStore
+            The storage backend that will manifest the array.
+
+        path : str
+            The location of the array inside the store.
+
+        Returns
+        -------
+        A zarr array that is structurally identical to the ArraySpec.
+        This operation will create metadata documents in the store.
+        """
         spec_dict = self.dict()
         attrs = spec_dict.pop("attrs")
         result = zarr.create(store=store, path=path, **spec_dict)
@@ -74,6 +112,21 @@ class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
 
     @classmethod
     def from_zarr(cls, zgroup: zarr.Group) -> "GroupSpec":
+        """
+        Create a GroupSpec from a zarr group. Subgroups and arrays contained in the zarr
+        group will be converted to instances of GroupSpec and ArraySpec, respectively,
+        and these spec instances will be stored in the .items attribute of the parent
+        GroupSpec. This occurs recursively, so the entire zarr hierarchy below a given
+        group can be represented as a GroupSpec.
+
+        Parameters
+        ----------
+        zgroup : zarr group
+
+        Returns
+        -------
+        An instance of GroupSpec that represents the structure of the zarr hierarchy.
+        """
         result: GroupSpec
         items = {}
         for name, item in zgroup.items():
@@ -87,6 +140,22 @@ class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
         return result
 
     def to_zarr(self, store: BaseStore, path: str):
+        """
+        Serialize a GroupSpec to a zarr group at a specific path in a zarr store.
+
+        Parameters
+        ----------
+        store : instance of zarr.BaseStore
+            The storage backend that will manifest the group and its contents.
+
+        path : str
+            The location of the group inside the store.
+
+        Returns
+        -------
+        A zarr group that is structurally identical to the GroupSpec.
+        This operation will create metadata documents in the store.
+        """
         spec_dict = self.dict()
         # pop items because it's not a valid kwarg for init_group
         spec_dict.pop("items")
@@ -105,6 +174,15 @@ class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
 def to_spec(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupSpec]:
     """
     Recursively parse a Zarr group or Zarr array into an ArraySpec or GroupSpec.
+
+    Paramters
+    ---------
+    element : a zarr Array or zarr Group
+
+    Returns
+    -------
+    An instance of GroupSpec or ArraySpec that represents the
+    structure of the zarr group or array.
     """
 
     if isinstance(element, zarr.Array):
@@ -131,11 +209,28 @@ def to_spec(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupSpe
 
 
 def from_spec(
-    store: BaseStore, path: str, spec: Union[ArraySpec, GroupSpec]
+    spec: Union[ArraySpec, GroupSpec], store: BaseStore, path: str
 ) -> Union[zarr.Array, zarr.Group]:
     """
-    Materialize a zarr hierarchy on a given storage backend from an ArraySpec or
-    GroupSpec.
+    Serialize a GroupSpec or ArraySpec to a zarr group or array at a specific path in
+    a zarr store.
+
+    Parameters
+    ----------
+    spec : GroupSpec or ArraySpec
+        The GroupSpec or ArraySpec that will be serialized to storage.
+
+    store : instance of zarr.BaseStore
+        The storage backend that will manifest the group or array.
+
+    path : str
+        The location of the group or array inside the store.
+
+    Returns
+    -------
+    A zarr Group or Array that is structurally identical to the spec object.
+    This operation will create metadata documents in the store.
+
     """
     if isinstance(spec, ArraySpec):
         result = spec.to_zarr(store, path)
