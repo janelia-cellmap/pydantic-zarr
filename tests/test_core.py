@@ -1,5 +1,6 @@
 import pytest
 import zarr
+from zarr.errors import ContainsGroupError
 from typing import Any, TypedDict
 import numcodecs
 from pydantic_zarr.core import ArraySpec, GroupSpec, to_zarr, from_zarr
@@ -167,3 +168,10 @@ def test_serde(
     # parse the spec from that group
     observed = from_zarr(group)
     assert observed == spec
+
+    # materialize again
+    with pytest.raises(ContainsGroupError):
+        group = to_zarr(spec, store, "/group_a")
+
+    group2 = to_zarr(spec, store, "/group_a", overwrite=True)
+    assert group2 == group

@@ -87,7 +87,9 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
             attrs=dict(zarray.attrs),
         )
 
-    def to_zarr(self, store: BaseStore, path: str) -> zarr.Array:
+    def to_zarr(
+        self, store: BaseStore, path: str, overwrite: bool = False
+    ) -> zarr.Array:
         """
         Serialize an ArraySpec to a zarr array at a specific path in a zarr store.
 
@@ -98,6 +100,11 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
 
         path : str
             The location of the array inside the store.
+
+        overwrite : bool
+            Whether to overwrite an existing array or group at the path. If overwrite is
+            False and an array or group already exists at the path, an exception will be
+            raised. Defaults to False.
 
         Returns
         -------
@@ -112,7 +119,7 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
             spec_dict["filters"] = [
                 numcodecs.get_codec(f) for f in spec_dict["filters"]
             ]
-        result = zarr.create(store=store, path=path, **spec_dict)
+        result = zarr.create(store=store, path=path, **spec_dict, overwrite=overwrite)
         result.attrs.put(attrs)
         return result
 
@@ -155,7 +162,7 @@ class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
         result = GroupSpec(attrs=dict(zgroup.attrs), items=items)
         return result
 
-    def to_zarr(self, store: BaseStore, path: str):
+    def to_zarr(self, store: BaseStore, path: str, overwrite: bool = False):
         """
         Serialize a GroupSpec to a zarr group at a specific path in a zarr store.
 
@@ -167,6 +174,11 @@ class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
         path : str
             The location of the group inside the store.
 
+        overwrite : bool
+            Whether to overwrite an existing array or group at the path. If overwrite is
+            False and an array or group already exists at the path, an exception will be
+            raised. Defaults to False.
+
         Returns
         -------
         A zarr group that is structurally identical to the GroupSpec.
@@ -177,13 +189,14 @@ class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
         spec_dict.pop("items")
         # pop attrs because it's not a valid kwarg for init_group
         attrs = spec_dict.pop("attrs")
-        # needing to call init_group, then zarr.group is not ergonomic
-        init_group(store=store, path=path)
-        result = zarr.group(store=store, path=path, **spec_dict)
+        # weird that we have to call init_group before creating the group
+        init_group(store, overwrite=overwrite, path=path)
+        result = zarr.group(store=store, path=path, **spec_dict, overwrite=overwrite)
         result.attrs.put(attrs)
         for name, item in self.items.items():
             subpath = os.path.join(path, name)
-            item.to_zarr(store, subpath)
+            item.to_zarr(store, subpath, overwrite=overwrite)
+
         return result
 
 
@@ -231,7 +244,10 @@ def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupS
 
 
 def to_zarr(
-    spec: Union[ArraySpec, GroupSpec], store: BaseStore, path: str
+    spec: Union[ArraySpec, GroupSpec],
+    store: BaseStore,
+    path: str,
+    overwrite: bool = False,
 ) -> Union[zarr.Array, zarr.Group]:
     """
     Serialize a GroupSpec or ArraySpec to a zarr group or array at a specific path in
@@ -248,6 +264,11 @@ def to_zarr(
     path : str
         The location of the group or array inside the store.
 
+    overwrite : bool
+       Whether to overwrite an existing array or group at the path. If overwrite is
+        False and an array or group already exists at the path, an exception will be
+        raised. Defaults to False.
+
     Returns
     -------
     A zarr Group or Array that is structurally identical to the spec object.
@@ -255,9 +276,9 @@ def to_zarr(
 
     """
     if isinstance(spec, ArraySpec):
-        result = spec.to_zarr(store, path)
+        result = spec.to_zarr(store, path, overwrite=overwrite)
     elif isinstance(spec, GroupSpec):
-        result = spec.to_zarr(store, path)
+        result = spec.to_zarr(store, path, overwrite=overwrite)
     else:
         msg = f"""
         Invalid argument for spec. Expected an instance of GroupSpec or ArraySpec, got
