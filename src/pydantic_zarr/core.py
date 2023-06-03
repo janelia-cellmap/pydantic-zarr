@@ -4,10 +4,12 @@ from typing import (
     Any,
     Generic,
     Literal,
+    Mapping,
     Optional,
     TypeVar,
     Union,
 )
+from pydantic import root_validator
 
 from pydantic.generics import GenericModel
 from zarr.storage import init_group, BaseStore
@@ -15,8 +17,8 @@ import numcodecs
 import zarr
 import os
 
-TAttrs = TypeVar("TAttrs", bound=dict[str, Any])
-TItem = TypeVar("TItem", bound=Union["ArraySpec", "GroupSpec"])
+TAttrs = TypeVar("TAttrs", bound=Mapping[str, Any])
+TItem = TypeVar("TItem", bound=Union["GroupSpec", "ArraySpec"])
 
 DimensionSeparator = Union[Literal["."], Literal["/"]]
 ZarrVersion = Union[Literal[2], Literal[3]]
@@ -40,7 +42,7 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
     """
     This pydantic model represents the structural properties of a zarr array.
     It does not represent the data contained in the array. It is generic with respect to
-    to the type of attrs.
+    the type of attrs.
     """
 
     shape: tuple[int, ...]
@@ -51,6 +53,16 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
     filters: Optional[list[dict[str, Any]]] = None
     dimension_separator: DimensionSeparator = "/"
     compressor: Optional[dict[str, Any]] = None
+
+    @root_validator
+    def check_ndim(cls, values):
+        if (lshape := len(values["shape"])) != (lchunks := len(values["chunks"])):
+            msg = f"""
+            Length of shape must match length of chunks. Got {lshape} elements
+            for shape and {lchunks} elements for chunks.
+            """
+            raise ValueError(msg)
+        return values
 
     @classmethod
     def from_zarr(cls, zarray: zarr.Array):

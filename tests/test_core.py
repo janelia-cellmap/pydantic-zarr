@@ -1,3 +1,4 @@
+from pydantic import ValidationError
 import pytest
 import zarr
 from zarr.errors import ContainsGroupError
@@ -135,7 +136,7 @@ def test_serde(
 
     store = zarr.MemoryStore()
 
-    spec = GroupSpec(
+    spec = GroupSpec[RootAttrs, Any](
         attrs=RootAttrs(foo=10, bar=[0, 1, 2]),
         items={
             "s0": ArraySpec(
@@ -161,7 +162,6 @@ def test_serde(
             "subgroup": GroupSpec(attrs=SubGroupAttrs(a="foo", b=1.0)),
         },
     )
-
     # materialize a zarr group, based on the spec
     group = to_zarr(spec, store, "/group_a")
 
@@ -175,3 +175,11 @@ def test_serde(
 
     group2 = to_zarr(spec, store, "/group_a", overwrite=True)
     assert group2 == group
+
+
+def test_shape_chunks():
+    for a, b in zip(range(1, 5), range(2, 6)):
+        with pytest.raises(ValidationError):
+            ArraySpec(shape=(1,) * a, chunks=(1,) * b, dtype="uint8", attrs={})
+        with pytest.raises(ValidationError):
+            ArraySpec(shape=(1,) * b, chunks=(1,) * a, dtype="uint8", attrs={})
