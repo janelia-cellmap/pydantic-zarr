@@ -9,13 +9,14 @@ from typing import (
     TypeVar,
     Union,
 )
-from pydantic import root_validator
+from pydantic import root_validator, validator
 
 from pydantic.generics import GenericModel
 from zarr.storage import init_group, BaseStore
 import numcodecs
 import zarr
 import os
+import numpy as np
 
 TAttrs = TypeVar("TAttrs", bound=Mapping[str, Any])
 TItem = TypeVar("TItem", bound=Union["GroupSpec", "ArraySpec"])
@@ -53,6 +54,15 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
     filters: Optional[list[dict[str, Any]]] = None
     dimension_separator: DimensionSeparator = "/"
     compressor: Optional[dict[str, Any]] = None
+
+    @validator("dtype", pre=True)
+    def stringify_dtype(cls, v):
+        """
+        Convert a np.dtype object into a string
+        """
+        if isinstance(v, np.dtype):
+            return str(v)
+        return v
 
     @root_validator
     def check_ndim(cls, values):

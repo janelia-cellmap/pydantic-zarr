@@ -5,6 +5,7 @@ from zarr.errors import ContainsGroupError
 from typing import Any, TypedDict
 import numcodecs
 from pydantic_zarr.core import ArraySpec, GroupSpec, to_zarr, from_zarr
+import numpy as np
 
 
 @pytest.mark.parametrize("chunks", ((1,), (1, 2), ((1, 2, 3))))
@@ -95,7 +96,7 @@ def test_array_spec(
 
 @pytest.mark.parametrize("chunks", ((1,), (1, 2), ((1, 2, 3))))
 @pytest.mark.parametrize("order", ("C", "F"))
-@pytest.mark.parametrize("dtype", ("bool", "uint8", "float64"))
+@pytest.mark.parametrize("dtype", ("bool", "uint8", np.dtype("uint8"), "float64"))
 @pytest.mark.parametrize("dimension_separator", (".", "/"))
 @pytest.mark.parametrize(
     "compressor", (numcodecs.LZMA().get_config(), numcodecs.GZip().get_config())
