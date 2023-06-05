@@ -98,9 +98,7 @@ def test_array_spec(
 @pytest.mark.parametrize("order", ("C", "F"))
 @pytest.mark.parametrize("dtype", ("bool", "uint8", np.dtype("uint8"), "float64"))
 @pytest.mark.parametrize("dimension_separator", (".", "/"))
-@pytest.mark.parametrize(
-    "compressor", (numcodecs.LZMA().get_config(), numcodecs.GZip().get_config())
-)
+@pytest.mark.parametrize("compressor", (numcodecs.LZMA(), numcodecs.GZip()))
 @pytest.mark.parametrize(
     "filters", (None, ("delta",), ("scale_offset",), ("delta", "scale_offset"))
 )

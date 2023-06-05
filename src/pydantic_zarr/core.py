@@ -17,6 +17,7 @@ import numcodecs
 import zarr
 import os
 import numpy as np
+from numcodecs.abc import Codec
 
 TAttrs = TypeVar("TAttrs", bound=Mapping[str, Any])
 TItem = TypeVar("TItem", bound=Union["GroupSpec", "ArraySpec"])
@@ -62,6 +63,12 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
         """
         if isinstance(v, np.dtype):
             return str(v)
+        return v
+
+    @validator("compressor", pre=True)
+    def jsonify_compressor(cls, v):
+        if isinstance(v, Codec):
+            v = v.get_config()
         return v
 
     @root_validator
