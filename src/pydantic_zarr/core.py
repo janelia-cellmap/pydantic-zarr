@@ -71,6 +71,16 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
             v = v.get_config()
         return v
 
+    @validator("filters", pre=True)
+    def jsonify_filters(cls, v):
+        if v is not None:
+            try:
+                v = [element.get_config() for element in v]
+                return v
+            except AttributeError:
+                pass
+        return v
+
     @root_validator
     def check_ndim(cls, values):
         if (lshape := len(values["shape"])) != (lchunks := len(values["chunks"])):
@@ -97,22 +107,15 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
 
         """
 
-        filters = zarray.filters
-        if filters is not None:
-            filters = [f.get_config() for f in filters]
-
-        compressor = zarray.compressor
-        if compressor is not None:
-            compressor = compressor.get_config()
         return cls(
             shape=zarray.shape,
             chunks=zarray.chunks,
             dtype=str(zarray.dtype),
             fill_value=zarray.fill_value,
             order=zarray.order,
-            filters=filters,
+            filters=zarray.filters,
             dimension_separator=zarray._dimension_separator,
-            compressor=compressor,
+            compressor=zarray.compressor,
             attrs=dict(zarray.attrs),
         )
 

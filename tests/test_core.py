@@ -98,7 +98,9 @@ def test_array_spec(
 @pytest.mark.parametrize("order", ("C", "F"))
 @pytest.mark.parametrize("dtype", ("bool", "uint8", np.dtype("uint8"), "float64"))
 @pytest.mark.parametrize("dimension_separator", (".", "/"))
-@pytest.mark.parametrize("compressor", (numcodecs.LZMA(), numcodecs.GZip()))
+@pytest.mark.parametrize(
+    "compressor", (numcodecs.LZMA().get_config(), numcodecs.GZip())
+)
 @pytest.mark.parametrize(
     "filters", (None, ("delta",), ("scale_offset",), ("delta", "scale_offset"))
 )
@@ -116,11 +118,9 @@ def test_serde(
         _filters = []
         for filter in filters:
             if filter == "delta":
-                _filters.append(numcodecs.Delta(dtype).get_config())
+                _filters.append(numcodecs.Delta(dtype))
             if filter == "scale_offset":
-                _filters.append(
-                    numcodecs.FixedScaleOffset(0, 1.0, dtype=dtype).get_config()
-                )
+                _filters.append(numcodecs.FixedScaleOffset(0, 1.0, dtype=dtype))
 
     class RootAttrs(TypedDict):
         foo: int
