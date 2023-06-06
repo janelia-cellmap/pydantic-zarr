@@ -6,6 +6,7 @@ from typing import Any, TypedDict
 import numcodecs
 from pydantic_zarr.core import ArraySpec, GroupSpec, to_zarr, from_zarr
 import numpy as np
+import numpy.typing as npt
 
 
 @pytest.mark.parametrize("chunks", ((1,), (1, 2), ((1, 2, 3))))
@@ -92,6 +93,23 @@ def test_array_spec(
     assert spec.dimension_separator == array2._dimension_separator
     assert spec.shape == array2.shape
     assert spec.fill_value == array2.fill_value
+
+
+@pytest.mark.parametrize("array", (np.arange(10), np.zeros((10, 10), dtype="uint8")))
+def test_array_spec_from_array(array: npt.NDArray[Any]):
+    spec = ArraySpec.from_array(array)
+    assert spec.dtype == str(array.dtype)
+    assert spec.shape == array.shape
+    assert spec.chunks == array.shape
+    assert spec.attrs == {}
+
+    attrs = {"foo": 10}
+    chunks = (1,) * array.ndim
+    spec2 = ArraySpec.from_array(array, attrs=attrs, chunks=chunks)
+    assert spec2.chunks == chunks
+    assert spec2.attrs == attrs
+    assert spec.dtype == str(array.dtype)
+    assert spec.shape == array.shape
 
 
 @pytest.mark.parametrize("chunks", ((1,), (1, 2), ((1, 2, 3))))

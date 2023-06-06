@@ -17,6 +17,7 @@ import numcodecs
 import zarr
 import os
 import numpy as np
+import numpy.typing as npt
 from numcodecs.abc import Codec
 
 TAttrs = TypeVar("TAttrs", bound=Mapping[str, Any])
@@ -90,6 +91,17 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
             """
             raise ValueError(msg)
         return values
+
+    @classmethod
+    def from_array(cls, array: npt.NDArray[Any], **kwargs):
+
+        return cls(
+            shape=array.shape,
+            dtype=array.dtype,
+            chunks=kwargs.pop("chunks", array.shape),
+            attrs=kwargs.pop("attrs", {}),
+            **kwargs,
+        )
 
     @classmethod
     def from_zarr(cls, zarray: zarr.Array):
