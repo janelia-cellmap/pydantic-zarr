@@ -135,7 +135,7 @@ def test_serde(
 
     store = zarr.MemoryStore()
 
-    spec = GroupSpec[RootAttrs, Any](
+    spec = GroupSpec(
         attrs=RootAttrs(foo=10, bar=[0, 1, 2]),
         items={
             "s0": ArraySpec(
@@ -182,3 +182,58 @@ def test_shape_chunks():
             ArraySpec(shape=(1,) * a, chunks=(1,) * b, dtype="uint8", attrs={})
         with pytest.raises(ValidationError):
             ArraySpec(shape=(1,) * b, chunks=(1,) * a, dtype="uint8", attrs={})
+
+
+def test_validation():
+    class GroupAttrsA(TypedDict):
+        group_a: bool
+
+    class GroupAttrsB(TypedDict):
+        group_b: bool
+
+    class ArrayAttrsA(TypedDict):
+        array_a: bool
+
+    class ArrayAttrsB(TypedDict):
+        array_b: bool
+
+    ArrayA = ArraySpec[ArrayAttrsA]
+    ArrayB = ArraySpec[ArrayAttrsB]
+    GroupA = GroupSpec[GroupAttrsA, ArrayA]
+    GroupB = GroupSpec[GroupAttrsB, ArrayB]
+
+    store = zarr.MemoryStore
+
+    specA = GroupA(
+        attrs=GroupAttrsA(group_a=True),
+        items={
+            "a": ArrayA(
+                attrs=ArrayAttrsA(array_a=True),
+                shape=(100,),
+                dtype="uint8",
+                chunks=(10,),
+            )
+        },
+    )
+
+    specB = GroupB(
+        attrs=GroupAttrsB(group_b=True),
+        items={
+            "a": ArrayB(
+                attrs=ArrayAttrsB(array_b=True),
+                shape=(100,),
+                dtype="uint8",
+                chunks=(10,),
+            )
+        },
+    )
+
+    store = zarr.MemoryStore()
+    groupAMat = specA.to_zarr(store, path="group_a")
+    groupBMat = specB.to_zarr(store, path="group_b")
+
+    with pytest.raises(ValidationError):
+        GroupB.from_zarr(groupAMat)
+
+    with pytest.raises(ValidationError):
+        GroupA.from_zarr(groupBMat)

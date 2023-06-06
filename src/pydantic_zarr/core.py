@@ -34,7 +34,6 @@ class NodeSpec(GenericModel, Generic[TAttrs]):
     """
 
     zarr_version: ZarrVersion = 2
-    attrs: TAttrs
 
     class Config:
         extra = "forbid"
@@ -47,6 +46,7 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
     the type of attrs.
     """
 
+    attrs: TAttrs
     shape: tuple[int, ...]
     chunks: tuple[int, ...]
     dtype: str
@@ -106,7 +106,6 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
         array.
 
         """
-
         return cls(
             shape=zarray.shape,
             chunks=zarray.chunks,
@@ -157,10 +156,11 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
 
 
 class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
+    attrs: TAttrs
     items: dict[str, TItem] = {}
 
     @classmethod
-    def from_zarr(cls, zgroup: zarr.Group) -> "GroupSpec":
+    def from_zarr(cls, zgroup: zarr.Group) -> "GroupSpec[TAttrs, TItem]":
         """
         Create a GroupSpec from a zarr group. Subgroups and arrays contained in the zarr
         group will be converted to instances of GroupSpec and ArraySpec, respectively,
@@ -176,7 +176,8 @@ class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
         -------
         An instance of GroupSpec that represents the structure of the zarr hierarchy.
         """
-        result: GroupSpec
+
+        result: GroupSpec[TAttrs, TItem]
         items = {}
         for name, item in zgroup.items():
             if isinstance(item, zarr.Array):
@@ -191,7 +192,7 @@ class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
                 raise ValueError(msg)
             items[name] = _item
 
-        result = GroupSpec(attrs=dict(zgroup.attrs), items=items)
+        result = cls(attrs=dict(zgroup.attrs), items=items)
         return result
 
     def to_zarr(self, store: BaseStore, path: str, overwrite: bool = False):
