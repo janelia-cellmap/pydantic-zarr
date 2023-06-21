@@ -2,7 +2,7 @@ from pydantic import ValidationError
 import pytest
 import zarr
 from zarr.errors import ContainsGroupError
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 import numcodecs
 from pydantic_zarr.core import ArraySpec, GroupSpec, to_zarr, from_zarr
 import numpy as np
@@ -124,9 +124,9 @@ def test_array_spec_from_array(array: npt.NDArray[Any]):
 )
 def test_serde(
     chunks: tuple[int, ...],
-    order: str,
+    order: Literal["C", "F"],
     dtype: str,
-    dimension_separator: str,
+    dimension_separator: Literal[".", "/"],
     compressor: Any,
     filters: tuple[str, ...],
 ):
@@ -255,3 +255,21 @@ def test_validation():
 
     with pytest.raises(ValidationError):
         GroupA.from_zarr(groupBMat)
+
+
+@pytest.mark.parametrize("shape", ((1,), (2, 2), (3, 4, 5)))
+@pytest.mark.parametrize("dtype", (None, "uint8", "float32"))
+def test_from_array(shape, dtype):
+    template = np.zeros(shape=shape, dtype=dtype)
+    spec = ArraySpec.from_array(template)
+
+    assert spec.shape == template.shape
+    assert spec.dtype == template.dtype
+    assert spec.chunks == template.shape
+    assert spec.attrs == {}
+
+    chunks = template.ndim * (1,)
+    attrs = {"foo": 100}
+    spec2 = ArraySpec.from_array(template, chunks=chunks, attrs=attrs)
+    assert spec2.chunks == chunks
+    assert spec2.attrs == attrs

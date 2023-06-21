@@ -94,10 +94,26 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
 
     @classmethod
     def from_array(cls, array: npt.NDArray[Any], **kwargs):
+        """
+        Create an ArraySpec from a numpy array-like object.
 
+        Parameters
+        ----------
+        array : object that conforms to the numpy array API.
+            The shape and dtype of this object will be used to construct an ArraySpec.
+            If the `chunks` keyword argument is not given, the shape of the array will
+            be used for the chunks
+
+        **kwargs : keyword arguments to the ArraySpec class constructor.
+
+        Returns
+        -------
+        An instance of ArraySpec with properties derived from the provided array.
+
+        """
         return cls(
             shape=array.shape,
-            dtype=array.dtype,
+            dtype=str(array.dtype),
             chunks=kwargs.pop("chunks", array.shape),
             attrs=kwargs.pop("attrs", {}),
             **kwargs,
