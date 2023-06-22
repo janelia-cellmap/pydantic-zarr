@@ -102,7 +102,7 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
         array : object that conforms to the numpy array API.
             The shape and dtype of this object will be used to construct an ArraySpec.
             If the `chunks` keyword argument is not given, the shape of the array will
-            be used for the chunks
+            be used for the chunks.
 
         **kwargs : keyword arguments to the ArraySpec class constructor.
 
