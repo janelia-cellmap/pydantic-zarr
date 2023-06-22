@@ -9,7 +9,7 @@ from typing import (
     TypeVar,
     Union,
 )
-from pydantic import root_validator, validator
+from pydantic import BaseModel, root_validator, validator
 
 from pydantic.generics import GenericModel
 from zarr.storage import init_group, BaseStore
@@ -20,7 +20,7 @@ import numpy as np
 import numpy.typing as npt
 from numcodecs.abc import Codec
 
-TAttrs = TypeVar("TAttrs", bound=Mapping[str, Any])
+TAttrs = TypeVar("TAttrs", bound=Union[Mapping[str, Any], BaseModel])
 TItem = TypeVar("TItem", bound=Union["GroupSpec", "ArraySpec"])
 
 DimensionSeparator = Union[Literal["."], Literal["/"]]
@@ -84,12 +84,13 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
 
     @root_validator
     def check_ndim(cls, values):
-        if (lshape := len(values["shape"])) != (lchunks := len(values["chunks"])):
-            msg = f"""
-            Length of shape must match length of chunks. Got {lshape} elements
-            for shape and {lchunks} elements for chunks.
-            """
-            raise ValueError(msg)
+        if "shape" in values and "chunks" in values:
+            if (lshape := len(values["shape"])) != (lchunks := len(values["chunks"])):
+                msg = f"""
+                Length of shape must match length of chunks. Got {lshape} elements
+                for shape and {lchunks} elements for chunks.
+                """
+                raise ValueError(msg)
         return values
 
     @classmethod
