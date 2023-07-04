@@ -62,9 +62,7 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
         """
         Convert a np.dtype object into a string
         """
-        if isinstance(v, np.dtype):
-            return str(v)
-        return v
+        return np.dtype(v).str
 
     @validator("compressor", pre=True)
     def jsonify_compressor(cls, v):

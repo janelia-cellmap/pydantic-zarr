@@ -98,7 +98,8 @@ def test_array_spec(
 @pytest.mark.parametrize("array", (np.arange(10), np.zeros((10, 10), dtype="uint8")))
 def test_array_spec_from_array(array: npt.NDArray[Any]):
     spec = ArraySpec.from_array(array)
-    assert spec.dtype == str(array.dtype)
+    assert spec.dtype == array.dtype.str
+    assert np.dtype(spec.dtype) == array.dtype
     assert spec.shape == array.shape
     assert spec.chunks == array.shape
     assert spec.attrs == {}
@@ -108,7 +109,8 @@ def test_array_spec_from_array(array: npt.NDArray[Any]):
     spec2 = ArraySpec.from_array(array, attrs=attrs, chunks=chunks)
     assert spec2.chunks == chunks
     assert spec2.attrs == attrs
-    assert spec.dtype == str(array.dtype)
+    assert spec.dtype == array.dtype.str
+    assert np.dtype(spec.dtype) == array.dtype
     assert spec.shape == array.shape
 
 
@@ -264,7 +266,7 @@ def test_from_array(shape, dtype):
     spec = ArraySpec.from_array(template)
 
     assert spec.shape == template.shape
-    assert spec.dtype == template.dtype
+    assert np.dtype(spec.dtype) == np.dtype(template.dtype)
     assert spec.chunks == template.shape
     assert spec.attrs == {}
 
