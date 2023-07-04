@@ -20,7 +20,7 @@ import numpy as np
 import numpy.typing as npt
 from numcodecs.abc import Codec
 
-TAttrs = TypeVar("TAttrs", bound=Union[Mapping[str, Any], BaseModel])
+TAttr = TypeVar("TAttr", bound=Union[Mapping[str, Any], BaseModel])
 TItem = TypeVar("TItem", bound=Union["GroupSpec", "ArraySpec"])
 
 DimensionSeparator = Union[Literal["."], Literal["/"]]
@@ -28,7 +28,7 @@ ZarrVersion = Union[Literal[2], Literal[3]]
 ArrayOrder = Union[Literal["C"], Literal["F"]]
 
 
-class NodeSpec(GenericModel, Generic[TAttrs]):
+class NodeSpec(GenericModel, Generic[TAttr]):
     """
     The base class for ArraySpec and GroupSpec. Generic with respect to the type of
     attrs.
@@ -40,14 +40,14 @@ class NodeSpec(GenericModel, Generic[TAttrs]):
         extra = "forbid"
 
 
-class ArraySpec(NodeSpec, Generic[TAttrs]):
+class ArraySpec(NodeSpec, Generic[TAttr]):
     """
     This pydantic model represents the structural properties of a zarr array.
     It does not represent the data contained in the array. It is generic with respect to
     the type of attrs.
     """
 
-    attrs: TAttrs
+    attrs: TAttr
     shape: tuple[int, ...]
     chunks: tuple[int, ...]
     dtype: str
@@ -182,12 +182,12 @@ class ArraySpec(NodeSpec, Generic[TAttrs]):
         return result
 
 
-class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
-    attrs: TAttrs
+class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
+    attrs: TAttr
     items: dict[str, TItem] = {}
 
     @classmethod
-    def from_zarr(cls, zgroup: zarr.Group) -> "GroupSpec[TAttrs, TItem]":
+    def from_zarr(cls, zgroup: zarr.Group) -> "GroupSpec[TAttr, TItem]":
         """
         Create a GroupSpec from a zarr group. Subgroups and arrays contained in the zarr
         group will be converted to instances of GroupSpec and ArraySpec, respectively,
@@ -204,7 +204,7 @@ class GroupSpec(NodeSpec, Generic[TAttrs, TItem]):
         An instance of GroupSpec that represents the structure of the zarr hierarchy.
         """
 
-        result: GroupSpec[TAttrs, TItem]
+        result: GroupSpec[TAttr, TItem]
         items = {}
         for name, item in zgroup.items():
             if isinstance(item, zarr.Array):
