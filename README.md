@@ -16,9 +16,11 @@ from pydantic_zarr.core import GroupSpec
 
 # create an in-memory zarr group + array with attributes
 store = MemoryStore()
+
 # create a group at the path 'foo'
 grp = group(store=store, path='foo')
 grp.attrs.put({'foo': 10})
+
 # create an array called 'bar' inside 'foo'
 arr = create(path='foo/bar', store=store, shape=(10,))
 arr.attrs.put({'array_metadata': True})
@@ -69,14 +71,19 @@ print(spec.json(indent=2))
 spec2 = spec.copy()
 spec2.attrs = {'a': 100, 'b': 'metadata'}
 spec2.items['bar'].shape = (100,)
+
 # serialize the spec to the store
 group2 = spec2.to_zarr(store, path='foo2')
+
 print(group2)
 #> <zarr.hierarchy.Group '/foo2'>
+
 print(dict(group2.attrs))
 #> {'a': 100, 'b': 'metadata'}
+
 print(group2['bar'])
 #> <zarr.core.Array '/foo2/bar' (100,) float32>
+
 print(dict(group2['bar'].attrs))
 #> {'array_metadata': True}
 ```
