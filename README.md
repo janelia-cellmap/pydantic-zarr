@@ -16,9 +16,11 @@ from pydantic_zarr.core import GroupSpec
 
 # create an in-memory zarr group + array with attributes
 store = MemoryStore()
-grp = group(store=store, path=)
+# create a group at the path 'foo'
+grp = group(store=store, path='foo')
 grp.attrs.put({'foo': 10})
-arr = create(path='foo/bar',store=store, shape=(10,), dtype='float32')
+# create an array called 'bar' inside 'foo'
+arr = create(path='foo/bar', store=store, shape=(10,))
 arr.attrs.put({'array_metadata': True})
 
 spec = GroupSpec.from_zarr(grp)
@@ -30,28 +32,34 @@ print(spec.json(indent=2))
     "foo": 10
   },
   "items": {
-    "bar": {
+    "foo": {
       "zarr_version": 2,
-      "attrs": {
-        "array_metadata": true
-      },
-      "shape": [
-        10
-      ],
-      "chunks": [
-        10
-      ],
-      "dtype": "float32",
-      "fill_value": 0,
-      "order": "C",
-      "filters": null,
-      "dimension_separator": ".",
-      "compressor": {
-        "id": "blosc",
-        "cname": "lz4",
-        "clevel": 5,
-        "shuffle": 1,
-        "blocksize": 0
+      "attrs": {},
+      "items": {
+        "bar": {
+          "zarr_version": 2,
+          "attrs": {
+            "array_metadata": true
+          },
+          "shape": [
+            10
+          ],
+          "chunks": [
+            10
+          ],
+          "dtype": "<f8",
+          "fill_value": 0,
+          "order": "C",
+          "filters": null,
+          "dimension_separator": ".",
+          "compressor": {
+            "id": "blosc",
+            "cname": "lz4",
+            "clevel": 5,
+            "shuffle": 1,
+            "blocksize": 0
+          }
+        }
       }
     }
   }
@@ -120,6 +128,162 @@ except ValidationError as exc:
     """
 
 # this passes validation
-print(ArraysOnlyGroup(attrs={}, items={'foo': ArraySpec(attrs={}, shape=(1,), dtype='uint8', chunks=(1,))}))
-#> zarr_version=2 attrs={} items={'foo': ArraySpec(zarr_version=2, attrs={}, shape=(1,), chunks=(1,), dtype='uint8', fill_value=0, order='C', filters=None, dimension_separator='/', compressor=None)}
+items = items={'foo': ArraySpec(attrs={}, shape=(1,), dtype='uint8', chunks=(1,))}
+print(ArraysOnlyGroup(attrs={}, items = items))
+"""
+{
+  "zarr_version": 2,
+  "attrs": {},
+  "items": {
+    "foo": {
+      "zarr_version": 2,
+      "attrs": {},
+      "shape": [
+        1
+      ],
+      "chunks": [
+        1
+      ],
+      "dtype": "|u1",
+      "fill_value": 0,
+      "order": "C",
+      "filters": null,
+      "dimension_separator": "/",
+      "compressor": null
+    }
+  }
+}
+"""
+```
+
+Python's type system can only take you so far. Pydantic validators can be used to apply
+even further restrictions on zarr hierarchies.
+
+```python
+from pydantic import validator
+from pydantic_zarr import GroupSpec, ArraySpec
+import numpy as np
+
+# define an array that must have uint8 dtype
+class Uint8Array(ArraySpec):
+
+    @validator('dtype')
+    def dtype_is_uint8(cls, v):
+        """
+        Raises a ValueError if the dtype is not '|u1' (uint8)
+        """
+        if v != "|u1":
+            msg = f"dtype must be '|u1' (uint8); got {v} instead."
+            raise ValueError(msg)
+        return v
+    
+# this will fail validation
+try:
+    Uint8Array(attrs={}, shape=(10,), chunks=(10,), dtype='float32')
+except ValidationError as exc:
+    print(exc)
+"""
+1 validation error for Uint8Array
+dtype
+  dtype must be '|u1' (uint8); got <f4 instead. (type=value_error)
+"""
+
+# this passes
+print(Uint8Array(attrs={}, shape=(10,), chunks=(10,), dtype='uint8').json(indent=2))
+"""
+{
+  "zarr_version": 2,
+  "attrs": {},
+  "shape": [
+    10
+  ],
+  "chunks": [
+    10
+  ],
+  "dtype": "|u1",
+  "fill_value": 0,
+  "order": "C",
+  "filters": null,
+  "dimension_separator": "/",
+  "compressor": null
+}
+"""
+
+# define a group that can only contain arrays with the same dtype
+class SameDtypeGroup(GroupSpec[Any, ArraySpec[Any]]):
+
+    @validator('items')
+    def dtypes_are_uniform(cls, v):
+        """
+        Raises a ValueError if the dtypes of the arrays are not the same
+        """
+        dtypes = set(arr.dtype for arr in v.values())
+        if len(dtypes) > 1:
+            msg = (f"Got arrays with multiple dtypes: {dtypes}. "
+                   "Arrays must have the same dtype.")
+            raise ValueError(msg)
+        return v
+
+
+# this will fail validation
+try:
+    items = {
+        'array_a': ArraySpec.from_array(np.arange(10)), 
+        'array_b': ArraySpec.from_array(np.arange(10, dtype='uint8'))}
+    SameDtypeGroup(attrs={}, items=items)
+except ValidationError as exc:
+    print(exc)
+"""
+1 validation error for SameDtypeGroup
+items
+  Got arrays with multiple dtypes: {'|u1', '<i8'}. Arrays must have the same dtype. (type=value_error)
+"""
+
+# this passes
+items = {
+        'array_a': ArraySpec.from_array(np.arange(10, dtype='uint8')), 
+        'array_b': ArraySpec.from_array(np.arange(10, dtype='uint8'))}
+
+print(SameDtypeGroup(attrs={}, items=items).json(indent=2))
+"""
+{
+  "zarr_version": 2,
+  "attrs": {},
+  "items": {
+    "array_a": {
+      "zarr_version": 2,
+      "attrs": {},
+      "shape": [
+        10
+      ],
+      "chunks": [
+        10
+      ],
+      "dtype": "|u1",
+      "fill_value": 0,
+      "order": "C",
+      "filters": null,
+      "dimension_separator": "/",
+      "compressor": null
+    },
+    "array_b": {
+      "zarr_version": 2,
+      "attrs": {},
+      "shape": [
+        10
+      ],
+      "chunks": [
+        10
+      ],
+      "dtype": "|u1",
+      "fill_value": 0,
+      "order": "C",
+      "filters": null,
+      "dimension_separator": "/",
+      "compressor": null
+    }
+  }
+}
+"""
+
 ```
