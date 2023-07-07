@@ -5,14 +5,14 @@
 ## Reading and writing a zarr hieararchy
 
 ### Reading
-The `GroupSpec` and `ArraySpec` classes represent zarr groups and arrays, respectively. To create an instance of a `GroupSpec` or `ArraySpec` from an existing zarr group or array, pass the zarr group / array to the `.from_zarr` method defined on the `GroupSpec` / `ArraySpec` classes. This will result in a `pydantic-zarr` model of the zarr object. 
+The `GroupSpec` and `ArraySpec` classes represent Zarr groups and arrays, respectively. To create an instance of a `GroupSpec` or `ArraySpec` from an existing Zarr group or array, pass the Zarr group / array to the `.from_zarr` method defined on the `GroupSpec` / `ArraySpec` classes. This will result in a `pydantic-zarr` model of the Zarr object. 
 
 Note that `GroupSpec.from_zarr(zarr_group)` will traverse the entire hierarchy under `zarr_group`. Future versions of this library may introduce a limit on the depth of this traversal: see [#2](https://github.com/d-v-b/pydantic-zarr/issues/2).
 
 Note that `from_zarr` will *not* read the data inside an array.
 
 ### Writing
-To write a hierarchy to some zarr-compatible storage backend, `GroupSpec` and `ArraySpec` have `to_zarr` methods, that take a zarr store and a path and return a zarr array or group created in the store at the given path. 
+To write a hierarchy to some zarr-compatible storage backend, `GroupSpec` and `ArraySpec` have `to_zarr` methods, that take a Zarr store and a path and return a Zarr array or group created in the store at the given path. 
 
 Note that `to_zarr` will *not* write any array data. You have to do this separately.
 
@@ -22,7 +22,7 @@ from zarr.creation import create
 from zarr.storage import MemoryStore
 from pydantic_zarr import GroupSpec
 
-# create an in-memory zarr group + array with attributes
+# create an in-memory Zarr group + array with attributes
 grp = group(path='foo')
 grp.attrs.put({'group_metadata': 10})
 arr = create(path='foo/bar', store=grp.store, shape=(10,), compressor=None)
@@ -51,7 +51,7 @@ print(spec.dict())
 }
 """
 
-# modify the spec to define a new zarr hierarchy
+# modify the spec to define a new Zarr hierarchy
 spec2 = spec.copy()
 spec2.attrs = {'a': 100, 'b': 'metadata'}
 
@@ -100,7 +100,7 @@ print(ArraySpec.from_array(np.arange(10)).dict())
 
 ## Using generic types  
 
-The following examples demonstrate how to specialize `GroupSpec` and `ArraySpec` with type parameters. By specializing `GroupSpec` or `ArraySpec` in this way, python type checkers and pydantic can type-check elemnts of a zarr hierarchy.
+The following examples demonstrate how to specialize `GroupSpec` and `ArraySpec` with type parameters. By specializing `GroupSpec` or `ArraySpec` in this way, python type checkers and pydantic can type-check elemnts of a Zarr hierarchy.
 
 ```python
 from pydantic_zarr import GroupSpec, ArraySpec
@@ -108,12 +108,12 @@ from pydantic_zarr.core import TItem, TAttr
 from pydantic import ValidationError
 from typing import Any, TypedDict
 
-# a pydantic BaseModel would also work here
+# a Pydantic BaseModel would also work here
 class GroupAttrs(TypedDict):
     a: int
     b: int
 
-# a zarr group with attributes consistent with GroupAttrs
+# a Zarr group with attributes consistent with GroupAttrs
 SpecificAttrsGroup = GroupSpec[GroupAttrs, TItem]
 
 try:
@@ -130,7 +130,7 @@ except ValidationError as exc:
 print(SpecificAttrsGroup(attrs={'a': 100, 'b': 100}))
 #> zarr_version=2 attrs={'a': 100, 'b': 100} items={}
 
-# a zarr group that only contains arrays -- no subgroups!
+# a Zarr group that only contains arrays -- no subgroups!
 # we re-use the TAttrs type variable defined in pydantic_zarr.core
 ArraysOnlyGroup = GroupSpec[TAttr, ArraySpec]
 
