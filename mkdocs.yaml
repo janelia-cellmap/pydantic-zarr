@@ -29,6 +29,14 @@ theme:
 nav:
     - About: index.md
     - Usage: intro.md
+    - API: api/core.md
+
+plugins:
+- mkdocstrings:
+    handlers:
+        python:
+          options:
+            show_signature_annotations: true
 
 markdown_extensions:
   - pymdownx.highlight:

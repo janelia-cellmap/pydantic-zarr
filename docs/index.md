@@ -14,37 +14,31 @@ array.attrs.put({'metadata': 'hello'})
 
 # this is a pydantic model
 spec = GroupSpec.from_zarr(group)
-print(spec.json(indent=2))
+print(spec.dict())
 """
 {
-  "zarr_version": 2,
-  "attrs": {},
-  "items": {
-    "bar": {
-      "zarr_version": 2,
-      "attrs": {
-        "metadata": "hello"
-      },
-      "shape": [
-        10
-      ],
-      "chunks": [
-        10
-      ],
-      "dtype": "|u1",
-      "fill_value": 0,
-      "order": "C",
-      "filters": null,
-      "dimension_separator": ".",
-      "compressor": {
-        "id": "blosc",
-        "cname": "lz4",
-        "clevel": 5,
-        "shuffle": 1,
-        "blocksize": 0
-      }
-    }
-  }
+    'zarr_version': 2,
+    'attrs': {},
+    'items': {
+        'bar': {
+            'zarr_version': 2,
+            'attrs': {'metadata': 'hello'},
+            'shape': (10,),
+            'chunks': (10,),
+            'dtype': '|u1',
+            'fill_value': 0,
+            'order': 'C',
+            'filters': None,
+            'dimension_separator': '.',
+            'compressor': {
+                'id': 'blosc',
+                'cname': 'lz4',
+                'clevel': 5,
+                'shuffle': 1,
+                'blocksize': 0,
+            },
+        }
+    },
 }
 """
 ```
@@ -59,12 +53,14 @@ Important note: this library only provides tools to represent the layout of zarr
 
 ## Design
 
-A Zarr group can be represented as two elements: 
+A Zarr group can be schematized as two elements: 
 
 - `attrs`: Anything JSON serializable, typically dict-like with string keys.
 - `items`: dict-like, with keys that are strings and values that are other Zarr groups, or Zarr arrays.
 
-A Zarr array can be represented similarly (minus the `items` property).
+A Zarr array can be schematized similarly, but without the `items` property. 
+
+Note the use of the term "schematized": zarr arrays also represent N-dimensional array data, but `pydantic-zarr` does not treat that data as part of the "schema" of a zarr array.
 
 Accordingly, in `pydantic-zarr`, Zarr groups are encoded by the `GroupSpec` class with two fields:
 
