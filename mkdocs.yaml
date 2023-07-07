@@ -28,7 +28,7 @@ theme:
 
 nav:
     - About: index.md
-    - Usage: intro.md
+    - Usage: usage.md
     - API: api/core.md
 
 plugins:
