@@ -187,7 +187,7 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
     items: dict[str, TItem] = {}
 
     @classmethod
-    def from_zarr(cls, zgroup: zarr.Group) -> "GroupSpec[TAttr, TItem]":
+    def from_zarr(cls, group: zarr.Group) -> "GroupSpec[TAttr, TItem]":
         """
         Create a GroupSpec from a zarr group. Subgroups and arrays contained in the zarr
         group will be converted to instances of GroupSpec and ArraySpec, respectively,
@@ -197,7 +197,7 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
 
         Parameters
         ----------
-        zgroup : zarr group
+        group : zarr group
 
         Returns
         -------
@@ -206,7 +206,7 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
 
         result: GroupSpec[TAttr, TItem]
         items = {}
-        for name, item in zgroup.items():
+        for name, item in group.items():
             if isinstance(item, zarr.Array):
                 _item = ArraySpec.from_zarr(item)
             elif isinstance(item, zarr.Group):
@@ -219,7 +219,7 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
                 raise ValueError(msg)
             items[name] = _item
 
-        result = cls(attrs=dict(zgroup.attrs), items=items)
+        result = cls(attrs=dict(group.attrs), items=items)
         return result
 
     def to_zarr(self, store: BaseStore, path: str, overwrite: bool = False):
@@ -264,7 +264,7 @@ def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupS
     """
     Recursively parse a Zarr group or Zarr array into an ArraySpec or GroupSpec.
 
-    Paramters
+    Parameters
     ---------
     element : a zarr Array or zarr Group
 
