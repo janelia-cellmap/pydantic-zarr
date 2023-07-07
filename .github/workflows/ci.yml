@@ -22,5 +22,5 @@ jobs:
             mkdocs-material-
       - run: |
             pip install poetry
-            poetry install
+            poetry install --with docs
             mkdocs gh-deploy --force
