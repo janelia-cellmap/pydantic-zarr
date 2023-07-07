@@ -80,4 +80,4 @@ This library supports [version 2](https://zarr.readthedocs.io/en/stable/spec/v2.
 
 ## Supported Pydantic versions
 
-[Pydantic 2.0](https://docs.pydantic.dev/2.0/) was recently released, with many breaking changes compared to 1.xx This library does not yet support Pydantic 2.0. Progress towards adopting pydantic 2.0 is tracked by [this issue](https://github.com/d-v-b/pydantic-zarr/issues/4).
+[Pydantic 2.0](https://docs.pydantic.dev/2.0/) was recently released, with many breaking changes compared to 1.xx This library does not yet support Pydantic 2.0. Progress towards adopting Pydantic 2.0 is tracked by [this issue](https://github.com/d-v-b/pydantic-zarr/issues/4).
