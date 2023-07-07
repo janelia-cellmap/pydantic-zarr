@@ -2,7 +2,19 @@
 
 
 
-## Example: reading and writing a zarr hieararchy
+## Reading and writing a zarr hieararchy
+
+### Reading
+The `GroupSpec` and `ArraySpec` classes represent zarr groups and arrays, respectively. To create an instance of a `GroupSpec` or `ArraySpec` from an existing zarr group or array, pass the zarr group / array to the `.from_zarr` method defined on the `GroupSpec` / `ArraySpec` classes. This will result in a `pydantic-zarr` model of the zarr object. 
+
+Note that `GroupSpec.from_zarr(zarr_group)` will traverse the entire hierarchy under `zarr_group`. Future versions of this library may introduce a limit on the depth of this traversal: see [#2](https://github.com/d-v-b/pydantic-zarr/issues/2).
+
+Note that `from_zarr` will *not* read the data inside an array.
+
+### Writing
+To write a hierarchy to some zarr-compatible storage backend, `GroupSpec` and `ArraySpec` have `to_zarr` methods, that take a zarr store and a path and return a zarr array or group created in the store at the given path. 
+
+Note that `to_zarr` will *not* write any array data. You have to do this separately.
 
 ```python
 from zarr import group
@@ -61,25 +73,34 @@ print(dict(group2['bar'].attrs))
 #> {'array_metadata': True}
 ```
 
-## Design
+### Creating from an array
 
-A Zarr group can be represented as two elements: 
+The `ArraySpec` class has a `from_array` static method that takes a numpy-array-like object and returns an `ArraySpec` with `shape` and `dtype` fields matching those of the array-like object.
 
-- `attrs`: Anything JSON serializable, typically dict-like with string keys.
-- `items`: dict-like, with keys that are strings and values that are other Zarr groups, or Zarr arrays.
+```python
+from pydantic_zarr import ArraySpec
+import numpy as np
 
-A Zarr array can be represented similarly (minus the `items` property).
+print(ArraySpec.from_array(np.arange(10)).dict())
+"""
+{
+    'zarr_version': 2,
+    'attrs': {},
+    'shape': (10,),
+    'chunks': (10,),
+    'dtype': '<i8',
+    'fill_value': 0,
+    'order': 'C',
+    'filters': None,
+    'dimension_separator': '/',
+    'compressor': None,
+}
+"""
+```
 
-Accordingly, in `pydantic-zarr`, Zarr groups are encoded by the `GroupSpec` class with two fields:
+## Using generic types  
 
-- `GroupSpec.attrs`: either a `Mapping` or a `pydantic.BaseModel`. 
-- `GroupSpec.items`: a mapping with string keys and values that must be `GroupSpec` or `ArraySpec` instances.
-
-Zarr arrays are represented by the `ArraySpec` class, which has a similar `attrs` field, as well as fields for all the zarr array properties (`dtype`, `shape`, `chunks`, etc).
-
-`GroupSpec` and `ArraySpec` are both [generic models](https://docs.pydantic.dev/1.10/usage/models/#generic-models). `GroupSpec` takes two type parameters, the first specializing the type of `GroupSpec.attrs`, and the second specializing the type of the *values* of `GroupSpec.items` (they keys of `GroupSpec.items` are always strings). `ArraySpec` only takes one type parameter, which specializes the type of `ArraySpec.attrs`.
-
-The following exmaples demonstrate how to specialize `GroupSpec` and `ArraySpec` with type parameters.
+The following examples demonstrate how to specialize `GroupSpec` and `ArraySpec` with type parameters. By specializing `GroupSpec` or `ArraySpec` in this way, python type checkers and pydantic can type-check elemnts of a zarr hierarchy.
 
 ```python
 from pydantic_zarr import GroupSpec, ArraySpec
@@ -135,69 +156,25 @@ items = {'foo': ArraySpec(attrs={},
                           dtype='uint8', 
                           chunks=(1,), 
                           compressor=None)}
-print(ArraysOnlyGroup(attrs={}, items=items).json(indent=2))
+print(ArraysOnlyGroup(attrs={}, items=items).dict())
 """
 {
-  "zarr_version": 2,
-  "attrs": {},
-  "items": {
-    "foo": {
-      "zarr_version": 2,
-      "attrs": {},
-      "shape": [
-        1
-      ],
-      "chunks": [
-        1
-      ],
-      "dtype": "|u1",
-      "fill_value": 0,
-      "order": "C",
-      "filters": null,
-      "dimension_separator": "/",
-      "compressor": null
-    }
-  }
-}
-"""
-```
-
-## Creation
-
-Both `ArraySpec` and `GroupSpec` have static `from_zarr` methods, which take a zarr array or group as arguments and return an `ArraySpec` or `GroupSpec`, respectively.
-
-```python
-from zarr import MemoryStore, group
-from pydantic_zarr import GroupSpec
-
-store = MemoryStore()
-grp = group(store=store, path='foo')
-spec = GroupSpec.from_zarr(grp)
-```
-
-The `ArraySpec` class has a `from_array` static method that takes a numpy-array-like object and returns an `ArraySpec` with `shape` and `dtype` fields matching those of the array-like object.
-
-```python
-from pydantic_zarr import ArraySpec
-import numpy as np
-
-print(ArraySpec.from_array(np.arange(10)).json(indent=2))
-"""
-{
-  "zarr_version": 2,
-  "attrs": {},
-  "shape": [
-    10
-  ],
-  "chunks": [
-    10
-  ],
-  "dtype": "<i8",
-  "fill_value": 0,
-  "order": "C",
-  "filters": null,
-  "dimension_separator": "/",
-  "compressor": null
+    'zarr_version': 2,
+    'attrs': {},
+    'items': {
+        'foo': {
+            'zarr_version': 2,
+            'attrs': {},
+            'shape': (1,),
+            'chunks': (1,),
+            'dtype': '|u1',
+            'fill_value': 0,
+            'order': 'C',
+            'filters': None,
+            'dimension_separator': '/',
+            'compressor': None,
+        }
+    },
 }
 """
 ```
