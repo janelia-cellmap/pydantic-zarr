@@ -1,5 +1,16 @@
 site_name: "pydantic-zarr"
-site_url: https://example.com/
+site_url: https://d-v-b.github.io/pydantic-zarr/
+site_author: Davis Bennett
+site_description: >-
+  Documentation for pydantic-zarr
+
+# Repository
+repo_name: d-v-b/pydantic-zarr
+repo_url: https://github.com/d-v-b/pydantic-zarr
+
+# Copyright
+copyright: Copyright &copy; 2016 - 2023 Davis Bennett
+
 theme:
   name: material
   palette: 
@@ -14,8 +25,10 @@ theme:
     toggle:
       icon: material/brightness-4
       name: Switch to light mode
+
 nav:
-    - Intro: intro.md
+    - About pydantic-zarr: index.md
+    - Usage: intro.md
 
 markdown_extensions:
   - pymdownx.highlight:
@@ -27,4 +40,5 @@ markdown_extensions:
   - pymdownx.superfences
   - toc:
       baselevel: 2
-      toc_depth: 2
+      toc_depth: 3
+      permalink: "#"

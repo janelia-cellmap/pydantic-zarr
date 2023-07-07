@@ -1,63 +1,41 @@
 # Introduction
 
-`pydantic-zarr` expresses data stored in the [zarr](https://zarr.readthedocs.io/en/stable/) format with [pydantic](https://docs.pydantic.dev/1.10/). Specifically, `pydantic-zarr` encodes zarr groups and arrays as [pydantic models](https://docs.pydantic.dev/1.10/usage/models/). Programmers can use these models formalize the structure of zarr hieararchies, enabling type-checking and runtime validation of zarr data. 
-
-Important note: this library only provides tools to represent the layout of zarr groups and arrays, and their attributes. It performs no type checking or runtime validation of the multidimensional array data contained inside zarr arrays.
 
 
-# Installation
-
-`pip install -U pydantic-zarr`
-
-# Example: reading and writing a zarr hieararchy
+## Example: reading and writing a zarr hieararchy
 
 ```python
 from zarr import group
 from zarr.creation import create
 from zarr.storage import MemoryStore
-from pydantic_zarr.core import GroupSpec
+from pydantic_zarr import GroupSpec
 
 # create an in-memory zarr group + array with attributes
-store = MemoryStore()
-grp = group(store=store, path='foo')
-grp.attrs.put({'foo': 10})
-arr = create(path='foo/bar', store=store, shape=(10,), compressor=None)
+grp = group(path='foo')
+grp.attrs.put({'group_metadata': 10})
+arr = create(path='foo/bar', store=grp.store, shape=(10,), compressor=None)
 arr.attrs.put({'array_metadata': True})
 
 spec = GroupSpec.from_zarr(grp)
-print(spec.json(indent=2))
+print(spec.dict())
 """
 {
-  "zarr_version": 2,
-  "attrs": {
-    "foo": 10
-  },
-  "items": {
-    "foo": {
-      "zarr_version": 2,
-      "attrs": {},
-      "items": {
-        "bar": {
-          "zarr_version": 2,
-          "attrs": {
-            "array_metadata": true
-          },
-          "shape": [
-            10
-          ],
-          "chunks": [
-            10
-          ],
-          "dtype": "<f4",
-          "fill_value": 0,
-          "order": "C",
-          "filters": null,
-          "dimension_separator": ".",
-          "compressor": null
+    'zarr_version': 2,
+    'attrs': {'group_metadata': 10},
+    'items': {
+        'bar': {
+            'zarr_version': 2,
+            'attrs': {'array_metadata': True},
+            'shape': (10,),
+            'chunks': (10,),
+            'dtype': '<f8',
+            'fill_value': 0,
+            'order': 'C',
+            'filters': None,
+            'dimension_separator': '.',
+            'compressor': None,
         }
-      }
-    }
-  }
+    },
 }
 """
 
@@ -68,7 +46,7 @@ spec2.attrs = {'a': 100, 'b': 'metadata'}
 spec2.items['bar'].shape = (100,)
 
 # serialize the spec to the store
-group2 = spec2.to_zarr(store, path='foo2')
+group2 = spec2.to_zarr(grp.store, path='foo2')
 
 print(group2)
 #> <zarr.hierarchy.Group '/foo2'>
@@ -77,13 +55,13 @@ print(dict(group2.attrs))
 #> {'a': 100, 'b': 'metadata'}
 
 print(group2['bar'])
-#> <zarr.core.Array '/foo2/bar' (100,) float32>
+#> <zarr.core.Array '/foo2/bar' (100,) float64>
 
 print(dict(group2['bar'].attrs))
 #> {'array_metadata': True}
 ```
 
-# Design
+## Design
 
 A Zarr group can be represented as two elements: 
 
@@ -124,7 +102,7 @@ except ValidationError as exc:
     """
     1 validation error for GroupSpec[GroupAttrs, TItem]
     attrs -> b
-    value is not a valid integer (type=type_error.integer)
+      value is not a valid integer (type=type_error.integer)
     """
 
 # this passes validation
@@ -142,19 +120,23 @@ except ValidationError as exc:
     """
     4 validation errors for GroupSpec[TAttr, ArraySpec]
     items -> foo -> shape
-        field required (type=value_error.missing)
+      field required (type=value_error.missing)
     items -> foo -> chunks
-        field required (type=value_error.missing)
+      field required (type=value_error.missing)
     items -> foo -> dtype
-        field required (type=value_error.missing)
+      field required (type=value_error.missing)
     items -> foo -> items
-        extra fields not permitted (type=value_error.extra)
+      extra fields not permitted (type=value_error.extra)
     """
 
 # this passes validation
-items = {'foo': ArraySpec(attrs={}, shape=(1,), dtype='uint8', chunks=(1,))}
+items = {'foo': ArraySpec(attrs={}, 
+                          shape=(1,), 
+                          dtype='uint8', 
+                          chunks=(1,), 
+                          compressor=None)}
 print(ArraysOnlyGroup(attrs={}, items=items).json(indent=2))
-'''
+"""
 {
   "zarr_version": 2,
   "attrs": {},
@@ -177,10 +159,10 @@ print(ArraysOnlyGroup(attrs={}, items=items).json(indent=2))
     }
   }
 }
-'''
+"""
 ```
 
-# Creation
+## Creation
 
 Both `ArraySpec` and `GroupSpec` have static `from_zarr` methods, which take a zarr array or group as arguments and return an `ArraySpec` or `GroupSpec`, respectively.
 
