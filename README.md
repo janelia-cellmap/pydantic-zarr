@@ -10,7 +10,7 @@
 
 ## Help
 
-See the [documentation](https://d-v-b.github.io/pydantic-zarr/#supported-zarr-versions) for detailed information about this project. 
+See the [documentation](https://d-v-b.github.io/pydantic-zarr/) for detailed information about this project. 
 
 ## Example
 
