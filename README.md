@@ -1,4 +1,7 @@
 # pydantic-zarr
+
+![PyPI](https://img.shields.io/pypi/v/pydantic-zarr)
+
 [Pydantic](https://docs.pydantic.dev/1.10/) models for [Zarr](https://zarr.readthedocs.io/en/stable/index.html).
 
 ## Installation

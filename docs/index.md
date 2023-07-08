@@ -1,5 +1,7 @@
 # pydantic-zarr
 
+![PyPI](https://img.shields.io/pypi/v/pydantic-zarr)
+
 Static typing and runtime validation for Zarr hiearchies.
 
 ## Overview
