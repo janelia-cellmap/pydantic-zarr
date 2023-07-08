@@ -12,7 +12,7 @@ Note that `GroupSpec.from_zarr(zarr_group)` will traverse the entire hierarchy u
 Note that `from_zarr` will *not* read the data inside an array.
 
 ### Writing
-To write a hierarchy to some zarr-compatible storage backend, `GroupSpec` and `ArraySpec` have `to_zarr` methods, that take a Zarr store and a path and return a Zarr array or group created in the store at the given path. 
+To write a hierarchy to some zarr-compatible storage backend, `GroupSpec` and `ArraySpec` have `to_zarr` methods that take a Zarr store and a path and return a Zarr array or group created in the store at the given path. 
 
 Note that `to_zarr` will *not* write any array data. You have to do this separately.
 
