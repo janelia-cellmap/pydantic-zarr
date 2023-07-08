@@ -15,7 +15,7 @@ jobs:
             python-version: "3.x"
         - name: Set up poetry
           run: |
-            pip install poetry=1.5.1
+            pip install poetry==1.5.1
         - name: Build package
           run: |
             poetry build
