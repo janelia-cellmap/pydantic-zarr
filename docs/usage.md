@@ -55,7 +55,7 @@ print(spec.dict())
 spec2 = spec.copy()
 spec2.attrs = {'a': 100, 'b': 'metadata'}
 
-spec2.items['bar'].shape = (100,)
+spec2['bar'].shape = (100,)
 
 # serialize the spec to the store
 group2 = spec2.to_zarr(grp.store, path='foo2')
@@ -151,17 +151,17 @@ except ValidationError as exc:
     """
 
 # this passes validation
-items = {'foo': ArraySpec(attrs={}, 
+content = {'foo': ArraySpec(attrs={}, 
                           shape=(1,), 
                           dtype='uint8', 
                           chunks=(1,), 
                           compressor=None)}
-print(ArraysOnlyGroup(attrs={}, items=items).dict())
+print(ArraysOnlyGroup(attrs={}, content=content).dict())
 """
 {
     'zarr_version': 2,
     'attrs': {},
-    'items': {
+    'content': {
         'foo': {
             'zarr_version': 2,
             'attrs': {},

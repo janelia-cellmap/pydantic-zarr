@@ -3,12 +3,16 @@ from __future__ import annotations
 from typing import (
     Any,
     Generic,
+    ItemsView,
+    Iterator,
+    KeysView,
     Literal,
-    Mapping,
     Optional,
     TypeVar,
     Union,
+    ValuesView,
 )
+from collections.abc import Mapping, MutableMapping
 from pydantic import BaseModel, root_validator, validator
 
 from pydantic.generics import GenericModel
@@ -182,9 +186,40 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         return result
 
 
-class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
+class GroupSpec(MutableMapping[str, TItem], NodeSpec, Generic[TAttr, TItem]):
+    """
+    A Pydantic model representing a Zarr group. This model is generic with two type
+    parameters. The first type parameter determines the type of the `attrs` property of
+    the GroupSpec; the second type parameter determines the type of the values contained
+    in the `content` property of the GroupSpec.
+    """
+
     attrs: TAttr
-    items: dict[str, TItem] = {}
+    content: dict[str, TItem] = {}
+
+    def __getitem__(self, key: str):
+        return self.content.__getitem__(key)
+
+    def __setitem__(self, key: str, value: TItem) -> None:
+        return self.content.__setitem__(key, value)
+
+    def __delitem__(self, key: Any) -> None:
+        return self.content.__delitem__(key)
+
+    def __iter__(self) -> Iterator[str]:
+        return self.content.__iter__()
+
+    def __len__(self) -> int:
+        return self.content.__len__()
+
+    def items(self) -> ItemsView:
+        return self.content.items()
+
+    def values(self) -> ValuesView:
+        return self.content.values()
+
+    def keys(self) -> KeysView:
+        return self.content.keys()
 
     @classmethod
     def from_zarr(cls, group: zarr.Group) -> "GroupSpec[TAttr, TItem]":
@@ -205,7 +240,7 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
         """
 
         result: GroupSpec[TAttr, TItem]
-        items = {}
+        content = {}
         for name, item in group.items():
             if isinstance(item, zarr.Array):
                 _item = ArraySpec.from_zarr(item)
@@ -217,9 +252,9 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
                 zarr.Group.
                 """
                 raise ValueError(msg)
-            items[name] = _item
+            content[name] = _item
 
-        result = cls(attrs=dict(group.attrs), items=items)
+        result = cls(attrs=dict(group.attrs), content=content)
         return result
 
     def to_zarr(self, store: BaseStore, path: str, overwrite: bool = False):
@@ -229,7 +264,7 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
         Parameters
         ----------
         store : instance of zarr.BaseStore
-            The storage backend that will manifest the group and its contents.
+            The storage backend that will manifest the group and its content.
 
         path : str
             The location of the group inside the store.
@@ -246,14 +281,15 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
         """
         spec_dict = self.dict()
         # pop items because it's not a valid kwarg for init_group
-        spec_dict.pop("items")
+        spec_dict.pop("content")
         # pop attrs because it's not a valid kwarg for init_group
         attrs = spec_dict.pop("attrs")
         # weird that we have to call init_group before creating the group
         init_group(store, overwrite=overwrite, path=path)
+
         result = zarr.group(store=store, path=path, **spec_dict, overwrite=overwrite)
         result.attrs.put(attrs)
-        for name, item in self.items.items():
+        for name, item in self.content.items():
             subpath = os.path.join(path, name)
             item.to_zarr(store, subpath, overwrite=overwrite)
 
@@ -291,7 +327,7 @@ def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupS
                 raise ValueError(msg)
             items[name] = _item
 
-        result = GroupSpec(attrs=dict(element.attrs), items=items)
+        result = GroupSpec(attrs=dict(element.attrs), content=items)
         return result
     else:
         msg = f"""

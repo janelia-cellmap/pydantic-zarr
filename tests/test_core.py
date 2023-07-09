@@ -9,6 +9,15 @@ import numpy as np
 import numpy.typing as npt
 
 
+def test_group_spec():
+    root = GroupSpec(attrs={}, content={})
+    subgroup = GroupSpec(attrs={"foo": 100})
+    assert len(root) == len(root.content) == 0
+    root["subgroup"] = subgroup
+    assert root["subgroup"] == subgroup
+    assert len(root) == 1
+
+
 @pytest.mark.parametrize("chunks", ((1,), (1, 2), ((1, 2, 3))))
 @pytest.mark.parametrize("order", ("C", "F"))
 @pytest.mark.parametrize("dtype", ("bool", "uint8", "float64"))
@@ -157,7 +166,7 @@ def test_serde(
 
     spec = GroupSpec(
         attrs=RootAttrs(foo=10, bar=[0, 1, 2]),
-        items={
+        content={
             "s0": ArraySpec(
                 shape=(10,) * len(chunks),
                 chunks=chunks,
@@ -226,7 +235,7 @@ def test_validation():
 
     specA = GroupA(
         attrs=GroupAttrsA(group_a=True),
-        items={
+        content={
             "a": ArrayA(
                 attrs=ArrayAttrsA(array_a=True),
                 shape=(100,),
@@ -238,7 +247,7 @@ def test_validation():
 
     specB = GroupB(
         attrs=GroupAttrsB(group_b=True),
-        items={
+        content={
             "a": ArrayB(
                 attrs=ArrayAttrsB(array_b=True),
                 shape=(100,),
