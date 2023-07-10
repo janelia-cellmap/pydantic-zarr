@@ -100,7 +100,7 @@ print(ArraySpec.from_array(np.arange(10)).dict())
 
 ## Using generic types  
 
-The following examples demonstrate how to specialize `GroupSpec` and `ArraySpec` with type parameters. By specializing `GroupSpec` or `ArraySpec` in this way, python type checkers and Pydantic can type-check elemnts of a Zarr hierarchy.
+The following examples demonstrate how to specialize `GroupSpec` and `ArraySpec` with type parameters. By specializing `GroupSpec` or `ArraySpec` in this way, python type checkers and Pydantic can type-check elements of a Zarr hierarchy.
 
 ```python
 from pydantic_zarr import GroupSpec, ArraySpec
