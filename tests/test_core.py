@@ -2,11 +2,17 @@ from pydantic import ValidationError
 import pytest
 import zarr
 from zarr.errors import ContainsGroupError
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal
 import numcodecs
 from pydantic_zarr.core import ArraySpec, GroupSpec, to_zarr, from_zarr
 import numpy as np
 import numpy.typing as npt
+import sys
+
+if sys.version_info < (3, 12):
+    from typing_extensions import TypedDict
+else:
+    from typing import TypedDict
 
 
 @pytest.mark.parametrize("chunks", ((1,), (1, 2), ((1, 2, 3))))
@@ -132,7 +138,6 @@ def test_serde(
     compressor: Any,
     filters: tuple[str, ...],
 ):
-
     _filters = filters
     if _filters is not None:
         _filters = []

@@ -10,7 +10,7 @@
 
 ## Help
 
-See the [documentation](https://d-v-b.github.io/pydantic-zarr/) for detailed information about this project. 
+See the [documentation](https://d-v-b.github.io/pydantic-zarr/) for detailed information about this project.
 
 ## Example
 
@@ -24,7 +24,7 @@ array.attrs.put({'metadata': 'hello'})
 
 # this is a pydantic model
 spec = GroupSpec.from_zarr(group)
-print(spec.dict())
+print(spec.model_dump())
 """
 {
     'zarr_version': 2,

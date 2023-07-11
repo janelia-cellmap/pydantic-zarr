@@ -1,18 +1,18 @@
 # Usage
 
-
-
 ## Reading and writing a zarr hieararchy
 
 ### Reading
-The `GroupSpec` and `ArraySpec` classes represent Zarr groups and arrays, respectively. To create an instance of a `GroupSpec` or `ArraySpec` from an existing Zarr group or array, pass the Zarr group / array to the `.from_zarr` method defined on the `GroupSpec` / `ArraySpec` classes. This will result in a `pydantic-zarr` model of the Zarr object. 
+
+The `GroupSpec` and `ArraySpec` classes represent Zarr groups and arrays, respectively. To create an instance of a `GroupSpec` or `ArraySpec` from an existing Zarr group or array, pass the Zarr group / array to the `.from_zarr` method defined on the `GroupSpec` / `ArraySpec` classes. This will result in a `pydantic-zarr` model of the Zarr object.
 
 Note that `GroupSpec.from_zarr(zarr_group)` will traverse the entire hierarchy under `zarr_group`. Future versions of this library may introduce a limit on the depth of this traversal: see [#2](https://github.com/d-v-b/pydantic-zarr/issues/2).
 
 Note that `from_zarr` will *not* read the data inside an array.
 
 ### Writing
-To write a hierarchy to some zarr-compatible storage backend, `GroupSpec` and `ArraySpec` have `to_zarr` methods that take a Zarr store and a path and return a Zarr array or group created in the store at the given path. 
+
+To write a hierarchy to some zarr-compatible storage backend, `GroupSpec` and `ArraySpec` have `to_zarr` methods that take a Zarr store and a path and return a Zarr array or group created in the store at the given path.
 
 Note that `to_zarr` will *not* write any array data. You have to do this separately.
 
@@ -29,7 +29,7 @@ arr = create(path='foo/bar', store=grp.store, shape=(10,), compressor=None)
 arr.attrs.put({'array_metadata': True})
 
 spec = GroupSpec.from_zarr(grp)
-print(spec.dict())
+print(spec.model_dump())
 """
 {
     'zarr_version': 2,
@@ -41,7 +41,7 @@ print(spec.dict())
             'shape': (10,),
             'chunks': (10,),
             'dtype': '<f8',
-            'fill_value': 0,
+            'fill_value': 0.0,
             'order': 'C',
             'filters': None,
             'dimension_separator': '.',
@@ -52,7 +52,7 @@ print(spec.dict())
 """
 
 # modify the spec to define a new Zarr hierarchy
-spec2 = spec.copy()
+spec2 = spec.model_copy()
 spec2.attrs = {'a': 100, 'b': 'metadata'}
 
 spec2.items['bar'].shape = (100,)
@@ -81,7 +81,7 @@ The `ArraySpec` class has a `from_array` static method that takes a numpy-array-
 from pydantic_zarr import ArraySpec
 import numpy as np
 
-print(ArraySpec.from_array(np.arange(10)).dict())
+print(ArraySpec.from_array(np.arange(10)).model_dump())
 """
 {
     'zarr_version': 2,
@@ -98,15 +98,22 @@ print(ArraySpec.from_array(np.arange(10)).dict())
 """
 ```
 
-## Using generic types  
+## Using generic types
 
 The following examples demonstrate how to specialize `GroupSpec` and `ArraySpec` with type parameters. By specializing `GroupSpec` or `ArraySpec` in this way, python type checkers and Pydantic can type-check elements of a Zarr hierarchy.
 
 ```python
+import sys
+
 from pydantic_zarr import GroupSpec, ArraySpec
 from pydantic_zarr.core import TItem, TAttr
 from pydantic import ValidationError
-from typing import Any, TypedDict
+from typing import Any
+
+if sys.version_info < (3, 12):
+    from typing_extensions import TypedDict
+else:
+    from typing import TypedDict
 
 # a Pydantic BaseModel would also work here
 class GroupAttrs(TypedDict):
@@ -121,9 +128,10 @@ try:
 except ValidationError as exc:
     print(exc)
     """
-    1 validation error for GroupSpec[GroupAttrs, TItem]
-    attrs -> b
-      value is not a valid integer (type=type_error.integer)
+    1 validation error for GroupSpec[GroupAttrs, ~TItem]
+    attrs.b
+      Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='foo', input_type=str]
+        For further information visit https://errors.pydantic.dev/2.1.2/v/int_parsing
     """
 
 # this passes validation
@@ -139,24 +147,19 @@ try:
 except ValidationError as exc:
     print(exc)
     """
-    4 validation errors for GroupSpec[TAttr, ArraySpec]
-    items -> foo -> shape
-      field required (type=value_error.missing)
-    items -> foo -> chunks
-      field required (type=value_error.missing)
-    items -> foo -> dtype
-      field required (type=value_error.missing)
-    items -> foo -> items
-      extra fields not permitted (type=value_error.extra)
+    1 validation error for GroupSpec[~TAttr, ArraySpec]
+    items.foo
+      Input should be a valid dictionary or instance of ArraySpec [type=model_type, input_value=GroupSpec(zarr_version=2, attrs={}, items={}), input_type=GroupSpec]
+        For further information visit https://errors.pydantic.dev/2.1.2/v/model_type
     """
 
 # this passes validation
-items = {'foo': ArraySpec(attrs={}, 
-                          shape=(1,), 
-                          dtype='uint8', 
-                          chunks=(1,), 
+items = {'foo': ArraySpec(attrs={},
+                          shape=(1,),
+                          dtype='uint8',
+                          chunks=(1,),
                           compressor=None)}
-print(ArraysOnlyGroup(attrs={}, items=items).dict())
+print(ArraysOnlyGroup(attrs={}, items=items).model_dump())
 """
 {
     'zarr_version': 2,

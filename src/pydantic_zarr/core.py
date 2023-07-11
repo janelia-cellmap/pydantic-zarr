@@ -9,9 +9,8 @@ from typing import (
     TypeVar,
     Union,
 )
-from pydantic import BaseModel, root_validator, validator
+from pydantic import BaseModel, model_validator, field_validator
 
-from pydantic.generics import GenericModel
 from zarr.storage import init_group, BaseStore
 import numcodecs
 import zarr
@@ -28,7 +27,7 @@ ZarrVersion = Union[Literal[2], Literal[3]]
 ArrayOrder = Union[Literal["C"], Literal["F"]]
 
 
-class NodeSpec(GenericModel, Generic[TAttr]):
+class NodeSpec(BaseModel, Generic[TAttr]):
     """
     The base class for ArraySpec and GroupSpec. Generic with respect to the type of
     attrs.
@@ -57,20 +56,20 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
     dimension_separator: DimensionSeparator = "/"
     compressor: Optional[dict[str, Any]] = None
 
-    @validator("dtype", pre=True)
+    @field_validator("dtype", mode="before")
     def stringify_dtype(cls, v):
         """
         Convert a np.dtype object into a string
         """
         return np.dtype(v).str
 
-    @validator("compressor", pre=True)
+    @field_validator("compressor", mode="before")
     def jsonify_compressor(cls, v):
         if isinstance(v, Codec):
             v = v.get_config()
         return v
 
-    @validator("filters", pre=True)
+    @field_validator("filters", mode="before")
     def jsonify_filters(cls, v):
         if v is not None:
             try:
@@ -80,7 +79,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
                 pass
         return v
 
-    @root_validator
+    @model_validator(mode="before")
     def check_ndim(cls, values):
         if "shape" in values and "chunks" in values:
             if (lshape := len(values["shape"])) != (lchunks := len(values["chunks"])):
@@ -137,7 +136,9 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
             shape=zarray.shape,
             chunks=zarray.chunks,
             dtype=str(zarray.dtype),
-            fill_value=zarray.fill_value,
+            # explicitly cast to numpy type and back to python
+            # so that int 0 isn't serialized as 0.0
+            fill_value=zarray.dtype.type(zarray.fill_value).tolist(),
             order=zarray.order,
             filters=zarray.filters,
             dimension_separator=zarray._dimension_separator,
@@ -169,7 +170,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         A zarr array that is structurally identical to the ArraySpec.
         This operation will create metadata documents in the store.
         """
-        spec_dict = self.dict()
+        spec_dict = self.model_dump()
         attrs = spec_dict.pop("attrs")
         if self.compressor is not None:
             spec_dict["compressor"] = numcodecs.get_codec(spec_dict["compressor"])
@@ -244,7 +245,7 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
         A zarr group that is structurally identical to the GroupSpec.
         This operation will create metadata documents in the store.
         """
-        spec_dict = self.dict()
+        spec_dict = self.model_dump()
         # pop items because it's not a valid kwarg for init_group
         spec_dict.pop("items")
         # pop attrs because it's not a valid kwarg for init_group
@@ -295,8 +296,8 @@ def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupS
         return result
     else:
         msg = f"""
-        Object of type {type(element)} cannot be processed by this function. 
-        This function can only parse objects that comply with the ArrayLike or 
+        Object of type {type(element)} cannot be processed by this function.
+        This function can only parse objects that comply with the ArrayLike or
         GroupLike protocols.
         """
         raise ValueError(msg)
