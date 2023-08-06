@@ -5,7 +5,7 @@
 Static typing and runtime validation for Zarr hiearchies.
 
 ## Overview
-`pydantic-zarr` expresses data stored in the [zarr](https://zarr.readthedocs.io/en/stable/) format with [Pydantic](https://docs.pydantic.dev/1.10/). Specifically, `pydantic-zarr` encodes Zarr groups and arrays as [Pydantic models](https://docs.pydantic.dev/1.10/usage/models/). Programmers can use these `pydantic-zarr` to formalize the structure of Zarr hierarchies, enabling type-checking and runtime validation of Zarr data. 
+`pydantic-zarr` expresses data stored in the [zarr](https://zarr.readthedocs.io/en/stable/) format with [Pydantic](https://docs.pydantic.dev/1.10/). Specifically, `pydantic-zarr` encodes Zarr groups and arrays as [Pydantic models](https://docs.pydantic.dev/1.10/usage/models/). Programmers can use `pydantic-zarr` to formalize the structure of Zarr hierarchies, enabling type-checking and runtime validation of Zarr data. 
 
 ```python
 import zarr
