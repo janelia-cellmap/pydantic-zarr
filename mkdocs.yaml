@@ -9,7 +9,7 @@ repo_name: d-v-b/pydantic-zarr
 repo_url: https://github.com/janelia-cellmap/pydantic-zarr
 
 # Copyright
-copyright: Copyright &copy; 2016 - 2023 Davis Bennett
+copyright: Copyright &copy; 2016 - 2023 HHMI / Janelia
 
 theme:
   name: material
