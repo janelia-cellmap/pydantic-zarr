@@ -1,15 +1,15 @@
 site_name: "pydantic-zarr"
-site_url: https://d-v-b.github.io/pydantic-zarr/
+site_url: https://janelia-cellmap.github.io/pydantic-zarr/
 site_author: Davis Bennett
 site_description: >-
   Documentation for pydantic-zarr
 
 # Repository
 repo_name: d-v-b/pydantic-zarr
-repo_url: https://github.com/d-v-b/pydantic-zarr
+repo_url: https://github.com/janelia-cellmap/pydantic-zarr
 
 # Copyright
-copyright: Copyright &copy; 2016 - 2023 Davis Bennett
+copyright: Copyright &copy; 2016 - 2023 HHMI / Janelia
 
 theme:
   name: material
