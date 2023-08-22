@@ -29,7 +29,7 @@ print(spec.dict())
 {
     'zarr_version': 2,
     'attrs': {},
-    'items': {
+    'members': {
         'bar': {
             'zarr_version': 2,
             'attrs': {'metadata': 'hello'},
