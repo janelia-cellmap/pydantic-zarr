@@ -34,7 +34,6 @@ class NodeSpecV2(GenericModel, Generic[TAttr]):
     """
 
     zarr_version: ZarrVersion = 2
-    attrs: TAttr
 
     class Config:
         extra = "forbid"
@@ -47,6 +46,7 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
     the type of attrs.
     """
 
+    attrs: TAttr
     shape: tuple[int, ...]
     chunks: tuple[int, ...]
     dtype: str
@@ -182,6 +182,7 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
 
 
 class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
+    attrs: TAttr
     members: dict[str, TItem] = {}
 
     @classmethod
