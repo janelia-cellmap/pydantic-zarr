@@ -157,7 +157,7 @@ def test_serde(
 
     spec = GroupSpec(
         attrs=RootAttrs(foo=10, bar=[0, 1, 2]),
-        items={
+        members={
             "s0": ArraySpec(
                 shape=(10,) * len(chunks),
                 chunks=chunks,
@@ -226,7 +226,7 @@ def test_validation():
 
     specA = GroupA(
         attrs=GroupAttrsA(group_a=True),
-        items={
+        members={
             "a": ArrayA(
                 attrs=ArrayAttrsA(array_a=True),
                 shape=(100,),
@@ -238,7 +238,7 @@ def test_validation():
 
     specB = GroupB(
         attrs=GroupAttrsB(group_b=True),
-        items={
+        members={
             "a": ArrayB(
                 attrs=ArrayAttrsB(array_b=True),
                 shape=(100,),

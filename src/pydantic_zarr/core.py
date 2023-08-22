@@ -10,8 +10,6 @@ from typing import (
     Union,
 )
 from pydantic import BaseModel, root_validator, validator
-
-from pydantic.generics import GenericModel
 from zarr.storage import init_group, BaseStore
 import numcodecs
 import zarr
@@ -28,7 +26,7 @@ ZarrVersion = Union[Literal[2], Literal[3]]
 ArrayOrder = Union[Literal["C"], Literal["F"]]
 
 
-class NodeSpec(GenericModel, Generic[TAttr]):
+class NodeSpecV2(BaseModel):
     """
     The base class for ArraySpec and GroupSpec. Generic with respect to the type of
     attrs.
@@ -40,7 +38,7 @@ class NodeSpec(GenericModel, Generic[TAttr]):
         extra = "forbid"
 
 
-class ArraySpec(NodeSpec, Generic[TAttr]):
+class ArraySpec(NodeSpecV2, Generic[TAttr]):
     """
     This pydantic model represents the structural properties of a zarr array.
     It does not represent the data contained in the array. It is generic with respect to
@@ -84,10 +82,10 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
     def check_ndim(cls, values):
         if "shape" in values and "chunks" in values:
             if (lshape := len(values["shape"])) != (lchunks := len(values["chunks"])):
-                msg = f"""
-                Length of shape must match length of chunks. Got {lshape} elements
-                for shape and {lchunks} elements for chunks.
-                """
+                msg = (
+                    f"Length of shape must match length of chunks. Got {lshape} "
+                    f"elements for shape and {lchunks} elements for chunks."
+                )
                 raise ValueError(msg)
         return values
 
@@ -182,9 +180,9 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         return result
 
 
-class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
+class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
     attrs: TAttr
-    items: dict[str, TItem] = {}
+    members: dict[str, TItem] = {}
 
     @classmethod
     def from_zarr(cls, group: zarr.Group) -> "GroupSpec[TAttr, TItem]":
@@ -205,21 +203,21 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
         """
 
         result: GroupSpec[TAttr, TItem]
-        items = {}
-        for name, item in group.items():
-            if isinstance(item, zarr.Array):
-                _item = ArraySpec.from_zarr(item)
-            elif isinstance(item, zarr.Group):
-                _item = cls.from_zarr(item)
+        members = {}
+        for name, member in group.items():
+            if isinstance(member, zarr.Array):
+                _item = ArraySpec.from_zarr(member)
+            elif isinstance(member, zarr.Group):
+                _item = cls.from_zarr(member)
             else:
                 msg = f"""
-                Unparseable object encountered: {type(item)}. Expected zarr.Array or
+                Unparseable object encountered: {type(member)}. Expected zarr.Array or
                 zarr.Group.
                 """
                 raise ValueError(msg)
-            items[name] = _item
+            members[name] = _item
 
-        result = cls(attrs=dict(group.attrs), items=items)
+        result = cls(attrs=dict(group.attrs), members=members)
         return result
 
     def to_zarr(self, store: BaseStore, path: str, overwrite: bool = False):
@@ -245,17 +243,17 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
         This operation will create metadata documents in the store.
         """
         spec_dict = self.dict()
-        # pop items because it's not a valid kwarg for init_group
-        spec_dict.pop("items")
+        # pop members because it's not a valid kwarg for init_group
+        spec_dict.pop("members")
         # pop attrs because it's not a valid kwarg for init_group
         attrs = spec_dict.pop("attrs")
         # weird that we have to call init_group before creating the group
         init_group(store, overwrite=overwrite, path=path)
         result = zarr.group(store=store, path=path, **spec_dict, overwrite=overwrite)
         result.attrs.put(attrs)
-        for name, item in self.items.items():
+        for name, member in self.members.items():
             subpath = os.path.join(path, name)
-            item.to_zarr(store, subpath, overwrite=overwrite)
+            member.to_zarr(store, subpath, overwrite=overwrite)
 
         return result
 
@@ -277,21 +275,21 @@ def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupS
     if isinstance(element, zarr.Array):
         result = ArraySpec.from_zarr(element)
     elif isinstance(element, zarr.Group):
-        items = {}
-        for name, item in element.items():
-            if isinstance(item, zarr.Array):
-                _item = ArraySpec.from_zarr(item)
-            elif isinstance(item, zarr.Group):
-                _item = GroupSpec.from_zarr(item)
+        members = {}
+        for name, member in element.items():
+            if isinstance(member, zarr.Array):
+                _item = ArraySpec.from_zarr(member)
+            elif isinstance(member, zarr.Group):
+                _item = GroupSpec.from_zarr(member)
             else:
                 msg = f"""
-                Unparseable object encountered: {type(item)}. Expected zarr.Array or
+                Unparseable object encountered: {type(member)}. Expected zarr.Array or
                 zarr.Group.
                 """
                 raise ValueError(msg)
-            items[name] = _item
+            members[name] = _item
 
-        result = GroupSpec(attrs=dict(element.attrs), items=items)
+        result = GroupSpec(attrs=dict(element.attrs), members=members)
         return result
     else:
         msg = f"""
