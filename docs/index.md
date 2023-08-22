@@ -22,7 +22,7 @@ print(spec.dict())
 {
     'zarr_version': 2,
     'attrs': {},
-    'items': {
+    'members': {
         'bar': {
             'zarr_version': 2,
             'attrs': {'metadata': 'hello'},
@@ -68,11 +68,11 @@ Note the use of the term "schematized": Zarr arrays also represent N-dimensional
 Accordingly, in `pydantic-zarr`, Zarr groups are encoded by the `GroupSpec` class with two fields:
 
 - `GroupSpec.attrs`: either a `Mapping` or a `pydantic.BaseModel`. 
-- `GroupSpec.items`: a mapping with string keys and values that must be `GroupSpec` or `ArraySpec` instances.
+- `GroupSpec.members`: a mapping with string keys and values that must be `GroupSpec` or `ArraySpec` instances.
 
 Zarr arrays are represented by the `ArraySpec` class, which has a similar `attrs` field, as well as fields for all the Zarr array properties (`dtype`, `shape`, `chunks`, etc).
 
-`GroupSpec` and `ArraySpec` are both [generic models](https://docs.pydantic.dev/1.10/usage/models/#generic-models). `GroupSpec` takes two type parameters, the first specializing the type of `GroupSpec.attrs`, and the second specializing the type of the *values* of `GroupSpec.items` (they keys of `GroupSpec.items` are always strings). `ArraySpec` only takes one type parameter, which specializes the type of `ArraySpec.attrs`.
+`GroupSpec` and `ArraySpec` are both [generic models](https://docs.pydantic.dev/1.10/usage/models/#generic-models). `GroupSpec` takes two type parameters, the first specializing the type of `GroupSpec.attrs`, and the second specializing the type of the *values* of `GroupSpec.items` (the keys of `GroupSpec.members` are strings). `ArraySpec` only takes one type parameter, which specializes the type of `ArraySpec.attrs`.
 
 Examples using this generic typing functionality can be found in the [usage guide](usage.md#using-generic-types).
 
