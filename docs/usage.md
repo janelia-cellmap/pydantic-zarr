@@ -34,7 +34,7 @@ print(spec.dict())
 {
     'zarr_version': 2,
     'attrs': {'group_metadata': 10},
-    'items': {
+    'members': {
         'bar': {
             'zarr_version': 2,
             'attrs': {'array_metadata': True},
@@ -55,7 +55,7 @@ print(spec.dict())
 spec2 = spec.copy()
 spec2.attrs = {'a': 100, 'b': 'metadata'}
 
-spec2.items['bar'].shape = (100,)
+spec2.members['bar'].shape = (100,)
 
 # serialize the spec to the store
 group2 = spec2.to_zarr(grp.store, path='foo2')
@@ -128,40 +128,40 @@ except ValidationError as exc:
 
 # this passes validation
 print(SpecificAttrsGroup(attrs={'a': 100, 'b': 100}))
-#> zarr_version=2 attrs={'a': 100, 'b': 100} items={}
+#> zarr_version=2 attrs={'a': 100, 'b': 100} members={}
 
 # a Zarr group that only contains arrays -- no subgroups!
 # we re-use the TAttrs type variable defined in pydantic_zarr.core
 ArraysOnlyGroup = GroupSpec[TAttr, ArraySpec]
 
 try:
-    ArraysOnlyGroup(attrs={}, items={'foo': GroupSpec(attrs={})})
+    ArraysOnlyGroup(attrs={}, members={'foo': GroupSpec(attrs={})})
 except ValidationError as exc:
     print(exc)
     """
     4 validation errors for GroupSpec[TAttr, ArraySpec]
-    items -> foo -> shape
+    members -> foo -> shape
       field required (type=value_error.missing)
-    items -> foo -> chunks
+    members -> foo -> chunks
       field required (type=value_error.missing)
-    items -> foo -> dtype
+    members -> foo -> dtype
       field required (type=value_error.missing)
-    items -> foo -> items
+    members -> foo -> members
       extra fields not permitted (type=value_error.extra)
     """
 
 # this passes validation
-items = {'foo': ArraySpec(attrs={}, 
-                          shape=(1,), 
-                          dtype='uint8', 
-                          chunks=(1,), 
-                          compressor=None)}
-print(ArraysOnlyGroup(attrs={}, items=items).dict())
+members = {'foo': ArraySpec(attrs={}, 
+                            shape=(1,), 
+                            dtype='uint8', 
+                            chunks=(1,), 
+                            compressor=None)}
+print(ArraysOnlyGroup(attrs={}, members=members).dict())
 """
 {
     'zarr_version': 2,
     'attrs': {},
-    'items': {
+    'members': {
         'foo': {
             'zarr_version': 2,
             'attrs': {},

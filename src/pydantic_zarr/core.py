@@ -10,6 +10,7 @@ from typing import (
     Union,
 )
 from pydantic import BaseModel, root_validator, validator
+from pydantic.generics import GenericModel
 from zarr.storage import init_group, BaseStore
 import numcodecs
 import zarr
@@ -26,13 +27,14 @@ ZarrVersion = Union[Literal[2], Literal[3]]
 ArrayOrder = Union[Literal["C"], Literal["F"]]
 
 
-class NodeSpecV2(BaseModel):
+class NodeSpecV2(GenericModel, Generic[TAttr]):
     """
     The base class for ArraySpec and GroupSpec. Generic with respect to the type of
     attrs.
     """
 
     zarr_version: ZarrVersion = 2
+    attrs: TAttr
 
     class Config:
         extra = "forbid"
@@ -45,7 +47,6 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
     the type of attrs.
     """
 
-    attrs: TAttr
     shape: tuple[int, ...]
     chunks: tuple[int, ...]
     dtype: str
@@ -181,7 +182,6 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
 
 
 class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
-    attrs: TAttr
     members: dict[str, TItem] = {}
 
     @classmethod
