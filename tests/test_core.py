@@ -2,7 +2,7 @@ from pydantic import ValidationError
 import pytest
 import zarr
 from zarr.errors import ContainsGroupError
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, Union
 import numcodecs
 from pydantic_zarr.core import ArraySpec, GroupSpec, to_zarr, from_zarr
 import numpy as np
@@ -150,12 +150,14 @@ def test_serde(
         a: str
         b: float
 
+    SubGroup = GroupSpec[SubGroupAttrs, Any]
+
     class ArrayAttrs(TypedDict):
         scale: list[float]
 
     store = zarr.MemoryStore()
 
-    spec = GroupSpec(
+    spec = GroupSpec[RootAttrs, Union[ArraySpec, SubGroup]](
         attrs=RootAttrs(foo=10, bar=[0, 1, 2]),
         members={
             "s0": ArraySpec(
@@ -178,7 +180,7 @@ def test_serde(
                 dimension_separator=dimension_separator,
                 attrs=ArrayAttrs(scale=[2.0]),
             ),
-            "subgroup": GroupSpec(attrs=SubGroupAttrs(a="foo", b=1.0)),
+            "subgroup": SubGroup(attrs=SubGroupAttrs(a="foo", b=1.0)),
         },
     )
     # materialize a zarr group, based on the spec
@@ -194,6 +196,11 @@ def test_serde(
 
     group2 = to_zarr(spec, store, "/group_a", overwrite=True)
     assert group2 == group
+
+    # again with class methods
+    group3 = spec.to_zarr(store, "/group_b")
+    observed = spec.from_zarr(group3)
+    assert observed == spec
 
 
 def test_shape_chunks():

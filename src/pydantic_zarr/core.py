@@ -8,6 +8,7 @@ from typing import (
     Optional,
     TypeVar,
     Union,
+    overload,
 )
 from pydantic import BaseModel, root_validator, validator
 from pydantic.generics import GenericModel
@@ -141,7 +142,7 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
             filters=zarray.filters,
             dimension_separator=zarray._dimension_separator,
             compressor=zarray.compressor,
-            attrs=dict(zarray.attrs),
+            attrs=zarray.attrs.asdict(),
         )
 
     def to_zarr(
@@ -209,7 +210,7 @@ class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
             if isinstance(member, zarr.Array):
                 _item = ArraySpec.from_zarr(member)
             elif isinstance(member, zarr.Group):
-                _item = cls.from_zarr(member)
+                _item = GroupSpec.from_zarr(member)
             else:
                 msg = f"""
                 Unparseable object encountered: {type(member)}. Expected zarr.Array or
@@ -218,7 +219,7 @@ class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
                 raise ValueError(msg)
             members[name] = _item
 
-        result = cls(attrs=dict(group.attrs), members=members)
+        result = cls(attrs=group.attrs.asdict(), members=members)
         return result
 
     def to_zarr(self, store: BaseStore, path: str, overwrite: bool = False):
@@ -259,6 +260,16 @@ class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
         return result
 
 
+@overload
+def from_zarr(element: zarr.Array) -> ArraySpec:
+    ...
+
+
+@overload
+def from_zarr(element: zarr.Group) -> GroupSpec:
+    ...
+
+
 def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupSpec]:
     """
     Recursively parse a Zarr group or Zarr array into an ArraySpec or GroupSpec.
@@ -290,7 +301,7 @@ def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupS
                 raise ValueError(msg)
             members[name] = _item
 
-        result = GroupSpec(attrs=dict(element.attrs), members=members)
+        result = GroupSpec(attrs=element.attrs.asdict(), members=members)
         return result
     else:
         msg = f"""
