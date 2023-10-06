@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pydantic-zarr"
-version = "0.5.0"
+version = "0.5.1"
 description = "pydantic models for zarr"
 authors = ["Davis Vann Bennett <davis.v.bennett@gmail.com>"]
 readme = "README.md"
