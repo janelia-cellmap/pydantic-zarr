@@ -102,7 +102,6 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
             The shape and dtype of this object will be used to construct an ArraySpec.
             If the `chunks` keyword argument is not given, the shape of the array will
             be used for the chunks.
-
         **kwargs : keyword arguments to the ArraySpec class constructor.
 
         Returns
@@ -155,10 +154,8 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
         ----------
         store : instance of zarr.BaseStore
             The storage backend that will manifest the array.
-
         path : str
             The location of the array inside the store.
-
         overwrite : bool
             Whether to overwrite an existing array or group at the path. If overwrite is
             False and an array or group already exists at the path, an exception will be
@@ -230,10 +227,8 @@ class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
         ----------
         store : instance of zarr.BaseStore
             The storage backend that will manifest the group and its contents.
-
         path : str
             The location of the group inside the store.
-
         overwrite : bool
             Whether to overwrite an existing array or group at the path. If overwrite is
             False and an array or group already exists at the path, an exception will be
@@ -325,13 +320,10 @@ def to_zarr(
     ----------
     spec : GroupSpec or ArraySpec
         The GroupSpec or ArraySpec that will be serialized to storage.
-
     store : instance of zarr.BaseStore
         The storage backend that will manifest the group or array.
-
     path : str
         The location of the group or array inside the store.
-
     overwrite : bool
        Whether to overwrite an existing array or group at the path. If overwrite is
         False and an array or group already exists at the path, an exception will be
