@@ -191,7 +191,7 @@ class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
         """
         Create a GroupSpec from a zarr group. Subgroups and arrays contained in the zarr
         group will be converted to instances of GroupSpec and ArraySpec, respectively,
-        and these spec instances will be stored in the .items attribute of the parent
+        and these spec instances will be stored in the .members attribute of the parent
         GroupSpec. This occurs recursively, so the entire zarr hierarchy below a given
         group can be represented as a GroupSpec.
 
@@ -294,21 +294,19 @@ def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupS
             elif isinstance(member, zarr.Group):
                 _item = GroupSpec.from_zarr(member)
             else:
-                msg = f"""
-                Unparseable object encountered: {type(member)}. Expected zarr.Array or
-                zarr.Group.
-                """
+                msg = (f"Unparseable object encountered: {type(member)}.",)
+                "Expected zarr.Array or zarr.Group."
                 raise ValueError(msg)
             members[name] = _item
 
         result = GroupSpec(attributes=element.attrs.asdict(), members=members)
         return result
     else:
-        msg = f"""
-        Object of type {type(element)} cannot be processed by this function. 
-        This function can only parse objects that comply with the ArrayLike or 
-        GroupLike protocols.
-        """
+        msg = (
+            f"Object of type {type(element)} cannot be processed by this function. ",
+        )
+        "This function can only parse objects that comply with the ArrayLike or ",
+        "GroupLike protocols."
         raise ValueError(msg)
     return result
 
@@ -350,10 +348,8 @@ def to_zarr(
     elif isinstance(spec, GroupSpec):
         result = spec.to_zarr(store, path, overwrite=overwrite)
     else:
-        msg = f"""
-        Invalid argument for spec. Expected an instance of GroupSpec or ArraySpec, got
-        {type(spec)} instead.
-        """
+        msg = ("Invalid argument for spec. Expected an instance of GroupSpec or ",)
+        f"ArraySpec, got {type(spec)} instead."
         raise ValueError(msg)
 
     return result
