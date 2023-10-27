@@ -10,7 +10,9 @@
 
 ## Help
 
-See the [documentation](https://d-v-b.github.io/pydantic-zarr/) for detailed information about this project.
+
+See the [documentation](https://janelia-cellmap.github.io/pydantic-zarr/) for detailed information about this project. 
+
 
 ## Example
 
@@ -29,7 +31,7 @@ print(spec.model_dump())
 {
     'zarr_version': 2,
     'attrs': {},
-    'items': {
+    'members': {
         'bar': {
             'zarr_version': 2,
             'attrs': {'metadata': 'hello'},

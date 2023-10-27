@@ -14,7 +14,6 @@ if sys.version_info < (3, 12):
 else:
     from typing import TypedDict
 
-
 @pytest.mark.parametrize("chunks", ((1,), (1, 2), ((1, 2, 3))))
 @pytest.mark.parametrize("order", ("C", "F"))
 @pytest.mark.parametrize("dtype", ("bool", "uint8", "float64"))
@@ -138,6 +137,7 @@ def test_serde(
     compressor: Any,
     filters: tuple[str, ...],
 ):
+
     _filters = filters
     if _filters is not None:
         _filters = []
@@ -155,12 +155,14 @@ def test_serde(
         a: str
         b: float
 
+    SubGroup = GroupSpec[SubGroupAttrs, Any]
+
     class ArrayAttrs(TypedDict):
         scale: list[float]
 
     store = zarr.MemoryStore()
 
-    spec = GroupSpec(
+    spec = GroupSpec[RootAttrs, Union[ArraySpec, SubGroup]](
         attributes=RootAttrs(foo=10, bar=[0, 1, 2]),
         members={
             "s0": ArraySpec(
@@ -203,6 +205,10 @@ def test_serde(
     group2 = to_zarr(spec, store, "/group_a", overwrite=True)
     assert group2 == group
 
+    # again with class methods
+    group3 = spec.to_zarr(store, "/group_b")
+    observed = spec.from_zarr(group3)
+    assert observed == spec
 
 def test_shape_chunks():
     for a, b in zip(range(1, 5), range(2, 6)):

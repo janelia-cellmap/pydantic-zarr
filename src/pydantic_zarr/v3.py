@@ -2,84 +2,105 @@ from __future__ import annotations
 
 from typing import (
     Any,
+    Dict,
     Generic,
+    List,
     Literal,
     Mapping,
     Optional,
+    Sequence,
+    Tuple,
     TypeVar,
     Union,
+    overload,
 )
-from pydantic import BaseModel, model_validator, field_validator
-
-from zarr.storage import init_group, BaseStore
-import numcodecs
+from pydantic import BaseModel, Field, validator
+from zarr.storage import BaseStore
 import zarr
-import os
 import numpy as np
 import numpy.typing as npt
-from numcodecs.abc import Codec
 
 from pydantic_zarr.core import StrictBase
 
-TAttr = TypeVar("TAttr", bound=Union[Mapping[str, Any], BaseModel])
+TAttr = TypeVar("TAttr", bound=Union[Dict[str, Any], BaseModel])
 TItem = TypeVar("TItem", bound=Union["GroupSpec", "ArraySpec"])
-
+TConfig = TypeVar("TConfig", bound=Union[Mapping[str, Any], BaseModel])
 DimensionSeparator = Union[Literal["."], Literal["/"]]
-ZarrVersion = Union[Literal[2], Literal[3]]
+ZarrVersion = Literal[3]
 ArrayOrder = Union[Literal["C"], Literal["F"]]
+NodeType = Union[Literal["group"], Literal["array"]]
+
+# todo: introduce a type that represents hexadecimal representations of floats
+FillValue = Union[
+    bool,
+    int,
+    float,
+    Literal["Infinity"],
+    Literal["-Infinity"],
+    Literal["NaN"],
+    str,
+    Tuple[float, float],
+    Tuple[int, ...],
+]
 
 
-class ArraySpec(StrictBase, Generic[TAttr]):
+class NamedConfig(StrictBase):
+    name: str
+    configuration: Optional[Union[Mapping[str, Any], BaseModel]]
+
+
+class RegularChunkingConfig(StrictBase):
+    chunk_shape: List[int]
+
+
+class RegularChunking(NamedConfig):
+    name: Literal["regular"] = "regular"
+    config: RegularChunkingConfig
+
+
+class DefaultChunkKeyEncodingConfig(StrictBase):
+    separator: DimensionSeparator
+
+
+class DefaultChunkKeyEncoding(NamedConfig):
+    name: Literal["default"]
+    config: Optional[DefaultChunkKeyEncodingConfig]
+
+
+class NodeSpecV3(StrictBase, Generic[TAttr]):
+    """
+    The base class for ArraySpec and GroupSpec. Generic with respect to the type of its
+    attributes.
+    """
+
+    zarr_format: ZarrVersion = 3
+    node_type: NodeType
+
+
+class ArraySpec(NodeSpecV3, Generic[TAttr]):
     """
     This pydantic model represents the structural properties of a zarr array.
     It does not represent the data contained in the array. It is generic with respect to
-    the type of attrs.
+    the type of attributes.
     """
 
-    zarr_version: ZarrVersion = 2
-    attributes: TAttr
-    shape: tuple[int, ...]
-    chunks: tuple[int, ...]
-    dtype: str
-    fill_value: Union[None, int, float] = 0
-    order: ArrayOrder = "C"
-    filters: Optional[list[dict[str, Any]]] = None
-    dimension_separator: DimensionSeparator = "/"
-    compressor: Optional[dict[str, Any]] = None
+    node_type: NodeType = Field(default="array", frozen=True)
+    attributes: TAttr = {}
+    shape: Sequence[int]
+    data_type: str
+    chunk_grid: NamedConfig
+    chunk_key_encoding: NamedConfig
+    fill_value: FillValue  # todo: validate this against the data type
+    codecs: List[NamedConfig]
+    storage_transformers: Optional[List[NamedConfig]] = None
+    dimension_names: Optional[List[str]]  # todo: validate this against shape
 
-    @field_validator("dtype", mode="before")
+    @validator("data_type", pre=True)
     def stringify_dtype(cls, v):
         """
         Convert a np.dtype object into a string
         """
         return np.dtype(v).str
-
-    @field_validator("compressor", mode="before")
-    def jsonify_compressor(cls, v):
-        if isinstance(v, Codec):
-            v = v.get_config()
-        return v
-
-    @field_validator("filters", mode="before")
-    def jsonify_filters(cls, v):
-        if v is not None:
-            try:
-                v = [element.get_config() for element in v]
-                return v
-            except AttributeError:
-                pass
-        return v
-
-    @model_validator(mode="before")
-    def check_ndim(cls, values):
-        if "shape" in values and "chunks" in values:
-            if (lshape := len(values["shape"])) != (lchunks := len(values["chunks"])):
-                msg = f"""
-                Length of shape must match length of chunks. Got {lshape} elements
-                for shape and {lchunks} elements for chunks.
-                """
-                raise ValueError(msg)
-        return values
 
     @classmethod
     def from_array(cls, array: npt.NDArray[Any], **kwargs):
@@ -92,7 +113,6 @@ class ArraySpec(StrictBase, Generic[TAttr]):
             The shape and dtype of this object will be used to construct an ArraySpec.
             If the `chunks` keyword argument is not given, the shape of the array will
             be used for the chunks.
-
         **kwargs : keyword arguments to the ArraySpec class constructor.
 
         Returns
@@ -123,19 +143,7 @@ class ArraySpec(StrictBase, Generic[TAttr]):
         array.
 
         """
-        return cls(
-            shape=zarray.shape,
-            chunks=zarray.chunks,
-            dtype=str(zarray.dtype),
-            # explicitly cast to numpy type and back to python
-            # so that int 0 isn't serialized as 0.0
-            fill_value=zarray.dtype.type(zarray.fill_value).tolist(),
-            order=zarray.order,
-            filters=zarray.filters,
-            dimension_separator=zarray._dimension_separator,
-            compressor=zarray.compressor,
-            attributes=zarray.attrs.asdict(),
-        )
+        raise NotImplementedError
 
     def to_zarr(
         self, store: BaseStore, path: str, overwrite: bool = False
@@ -147,10 +155,8 @@ class ArraySpec(StrictBase, Generic[TAttr]):
         ----------
         store : instance of zarr.BaseStore
             The storage backend that will manifest the array.
-
         path : str
             The location of the array inside the store.
-
         overwrite : bool
             Whether to overwrite an existing array or group at the path. If overwrite is
             False and an array or group already exists at the path, an exception will be
@@ -161,21 +167,11 @@ class ArraySpec(StrictBase, Generic[TAttr]):
         A zarr array that is structurally identical to the ArraySpec.
         This operation will create metadata documents in the store.
         """
-        spec_dict = self.model_dump()
-        attrs = spec_dict.pop("attributes")
-        if self.compressor is not None:
-            spec_dict["compressor"] = numcodecs.get_codec(spec_dict["compressor"])
-        if self.filters is not None:
-            spec_dict["filters"] = [
-                numcodecs.get_codec(f) for f in spec_dict["filters"]
-            ]
-        result = zarr.create(store=store, path=path, **spec_dict, overwrite=overwrite)
-        result.attrs.put(attrs)
-        return result
+        raise NotImplementedError
 
 
-class GroupSpec(StrictBase, Generic[TAttr, TItem]):
-    zarr_version: ZarrVersion = 2
+class GroupSpec(NodeSpecV3, Generic[TAttr, TItem]):
+    node_type: NodeType = Field(default="group", frozen=True)
     attributes: TAttr
     members: dict[str, TItem] = {}
 
@@ -184,7 +180,7 @@ class GroupSpec(StrictBase, Generic[TAttr, TItem]):
         """
         Create a GroupSpec from a zarr group. Subgroups and arrays contained in the zarr
         group will be converted to instances of GroupSpec and ArraySpec, respectively,
-        and these spec instances will be stored in the .items attribute of the parent
+        and these spec instances will be stored in the .members attribute of the parent
         GroupSpec. This occurs recursively, so the entire zarr hierarchy below a given
         group can be represented as a GroupSpec.
 
@@ -197,24 +193,7 @@ class GroupSpec(StrictBase, Generic[TAttr, TItem]):
         An instance of GroupSpec that represents the structure of the zarr hierarchy.
         """
 
-        result: GroupSpec[TAttr, TItem]
-        items = {}
-        for name, item in group.items():
-            if isinstance(item, zarr.Array):
-                _item = ArraySpec.from_zarr(item)
-            elif isinstance(item, zarr.Group):
-                _item = GroupSpec.from_zarr(item)
-            else:
-                msg = (
-                    f"Unparseable object encountered: {type(item)}. Expected zarr.Array"
-                    " or zarr.Group."
-                )
-
-                raise ValueError(msg)
-            items[name] = _item
-
-        result = cls(attributes=group.attrs.asdict(), members=items)
-        return result
+        raise NotImplementedError
 
     def to_zarr(self, store: BaseStore, path: str, overwrite: bool = False):
         """
@@ -224,10 +203,8 @@ class GroupSpec(StrictBase, Generic[TAttr, TItem]):
         ----------
         store : instance of zarr.BaseStore
             The storage backend that will manifest the group and its contents.
-
         path : str
             The location of the group inside the store.
-
         overwrite : bool
             Whether to overwrite an existing array or group at the path. If overwrite is
             False and an array or group already exists at the path, an exception will be
@@ -238,20 +215,7 @@ class GroupSpec(StrictBase, Generic[TAttr, TItem]):
         A zarr group that is structurally identical to the GroupSpec.
         This operation will create metadata documents in the store.
         """
-        spec_dict = self.model_dump()
-        # pop items because it's not a valid kwarg for init_group
-        spec_dict.pop("members")
-        # pop attrs because it's not a valid kwarg for init_group
-        attrs = spec_dict.pop("attributes")
-        # weird that we have to call init_group before creating the group
-        init_group(store, overwrite=overwrite, path=path)
-        result = zarr.group(store=store, path=path, **spec_dict, overwrite=overwrite)
-        result.attrs.put(attrs)
-        for name, member in self.members.items():
-            subpath = os.path.join(path, name)
-            member.to_zarr(store, subpath, overwrite=overwrite)
-
-        return result
+        raise NotImplementedError
 
 
 @overload
@@ -278,32 +242,7 @@ def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupS
     structure of the zarr group or array.
     """
 
-    if isinstance(element, zarr.Array):
-        result = ArraySpec.from_zarr(element)
-    elif isinstance(element, zarr.Group):
-        members = {}
-        for name, member in element.items():
-            if isinstance(member, zarr.Array):
-                _item = ArraySpec.from_zarr(member)
-            elif isinstance(member, zarr.Group):
-                _item = GroupSpec.from_zarr(member)
-            else:
-                msg = (
-                    f"Unparseable object encountered: {type(member)}. Expected "
-                    "zarr.Array or zarr.Group.",
-                )
-                raise ValueError(msg)
-            members[name] = _item
-
-        result = GroupSpec(attributes=element.attrs.asdict(), members=members)
-        return result
-    else:
-        msg = (
-            f"Object of type {type(element)} cannot be processed by this function. "
-            "This function can only parse zarr.Group or zarr.Array"
-        )
-        raise ValueError(msg)
-    return result
+    raise NotImplementedError
 
 
 def to_zarr(
@@ -320,13 +259,10 @@ def to_zarr(
     ----------
     spec : GroupSpec or ArraySpec
         The GroupSpec or ArraySpec that will be serialized to storage.
-
     store : instance of zarr.BaseStore
         The storage backend that will manifest the group or array.
-
     path : str
         The location of the group or array inside the store.
-
     overwrite : bool
        Whether to overwrite an existing array or group at the path. If overwrite is
         False and an array or group already exists at the path, an exception will be
@@ -343,10 +279,8 @@ def to_zarr(
     elif isinstance(spec, GroupSpec):
         result = spec.to_zarr(store, path, overwrite=overwrite)
     else:
-        msg = (
-            "Invalid argument for spec. Expected an instance of GroupSpec or ",
-            f"ArraySpec, got {type(spec)} instead.",
-        )
+        msg = ("Invalid argument for spec. Expected an instance of GroupSpec or ",)
+        f"ArraySpec, got {type(spec)} instead."
         raise ValueError(msg)
 
     return result

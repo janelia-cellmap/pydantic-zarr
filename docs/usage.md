@@ -20,7 +20,7 @@ Note that `to_zarr` will *not* write any array data. You have to do this separat
 from zarr import group
 from zarr.creation import create
 from zarr.storage import MemoryStore
-from pydantic_zarr import GroupSpec
+from pydantic_zarr.v2 import GroupSpec
 
 # create an in-memory Zarr group + array with attributes
 grp = group(path='foo')
@@ -81,7 +81,7 @@ print(dict(group2['bar'].attrs))
 The `ArraySpec` class has a `from_array` static method that takes a numpy-array-like object and returns an `ArraySpec` with `shape` and `dtype` fields matching those of the array-like object.
 
 ```python
-from pydantic_zarr import ArraySpec
+from pydantic_zarr.v2 import ArraySpec
 import numpy as np
 
 print(ArraySpec.from_array(np.arange(10)).model_dump())
@@ -106,8 +106,6 @@ print(ArraySpec.from_array(np.arange(10)).model_dump())
 The following examples demonstrate how to specialize `GroupSpec` and `ArraySpec` with type parameters. By specializing `GroupSpec` or `ArraySpec` in this way, python type checkers and Pydantic can type-check elements of a Zarr hierarchy.
 
 ```python
-import sys
-
 from pydantic_zarr.v2 import GroupSpec, ArraySpec, TItem, TAttr
 from pydantic import ValidationError
 from typing import Any
@@ -118,12 +116,12 @@ else:
     from typing import TypedDict
 
 # a Pydantic BaseModel would also work here
-class GroupAttrs(TypedDict):
+class Groupattributes(TypedDict):
     a: int
     b: int
 
-# a Zarr group with attributes consistent with GroupAttrs
-SpecificAttrsGroup = GroupSpec[GroupAttrs, TItem]
+# a Zarr group with attributes consistent with Groupattributes
+SpecificattributesGroup = GroupSpec[Groupattributes, TItem]
 
 try:
     SpecificAttrsGroup(attributes={'a' : 10, 'b': 'foo'})
@@ -141,7 +139,7 @@ print(SpecificAttrsGroup(attributes={'a': 100, 'b': 100}))
 #> zarr_version=2 attributes={'a': 100, 'b': 100} members={}
 
 # a Zarr group that only contains arrays -- no subgroups!
-# we re-use the TAttrs type variable defined in pydantic_zarr.core
+# we re-use the Tattributes type variable defined in pydantic_zarr.core
 ArraysOnlyGroup = GroupSpec[TAttr, ArraySpec]
 
 try:
