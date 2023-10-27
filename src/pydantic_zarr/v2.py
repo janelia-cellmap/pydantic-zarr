@@ -46,7 +46,7 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
     the type of attrs.
     """
 
-    attrs: TAttr
+    attributes: TAttr
     shape: tuple[int, ...]
     chunks: tuple[int, ...]
     dtype: str
@@ -113,7 +113,7 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
             shape=array.shape,
             dtype=str(array.dtype),
             chunks=kwargs.pop("chunks", array.shape),
-            attrs=kwargs.pop("attrs", {}),
+            attributes=kwargs.pop("attributes", {}),
             **kwargs,
         )
 
@@ -141,7 +141,7 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
             filters=zarray.filters,
             dimension_separator=zarray._dimension_separator,
             compressor=zarray.compressor,
-            attrs=zarray.attrs.asdict(),
+            attributes=zarray.attrs.asdict(),
         )
 
     def to_zarr(
@@ -169,7 +169,7 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
         This operation will create metadata documents in the store.
         """
         spec_dict = self.dict()
-        attrs = spec_dict.pop("attrs")
+        attrs = spec_dict.pop("attributes")
         if self.compressor is not None:
             spec_dict["compressor"] = numcodecs.get_codec(spec_dict["compressor"])
         if self.filters is not None:
@@ -182,7 +182,7 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
 
 
 class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
-    attrs: TAttr
+    attributes: TAttr
     members: dict[str, TItem] = {}
 
     @classmethod
@@ -211,14 +211,14 @@ class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
             elif isinstance(member, zarr.Group):
                 _item = GroupSpec.from_zarr(member)
             else:
-                msg = f"""
-                Unparseable object encountered: {type(member)}. Expected zarr.Array or
-                zarr.Group.
-                """
+                msg = (
+                    f"Unparseable object encountered: {type(member)}. Expected "
+                    "zarr.Array or zarr.Group."
+                )
                 raise ValueError(msg)
             members[name] = _item
 
-        result = cls(attrs=group.attrs.asdict(), members=members)
+        result = cls(attributes=group.attrs.asdict(), members=members)
         return result
 
     def to_zarr(self, store: BaseStore, path: str, overwrite: bool = False):
@@ -247,7 +247,7 @@ class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
         # pop members because it's not a valid kwarg for init_group
         spec_dict.pop("members")
         # pop attrs because it's not a valid kwarg for init_group
-        attrs = spec_dict.pop("attrs")
+        attrs = spec_dict.pop("attributes")
         # weird that we have to call init_group before creating the group
         init_group(store, overwrite=overwrite, path=path)
         result = zarr.group(store=store, path=path, **spec_dict, overwrite=overwrite)
@@ -293,21 +293,20 @@ def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupS
             elif isinstance(member, zarr.Group):
                 _item = GroupSpec.from_zarr(member)
             else:
-                msg = f"""
-                Unparseable object encountered: {type(member)}. Expected zarr.Array or
-                zarr.Group.
-                """
+                msg = (
+                    f"Unparseable object encountered: {type(member)}. Expected "
+                    "zarr.Array or zarr.Group.",
+                )
                 raise ValueError(msg)
             members[name] = _item
 
-        result = GroupSpec(attrs=element.attrs.asdict(), members=members)
+        result = GroupSpec(attributes=element.attrs.asdict(), members=members)
         return result
     else:
-        msg = f"""
-        Object of type {type(element)} cannot be processed by this function. 
-        This function can only parse objects that comply with the ArrayLike or 
-        GroupLike protocols.
-        """
+        msg = (
+            f"Object of type {type(element)} cannot be processed by this function. "
+            "This function can only parse zarr.Group or zarr.Array"
+        )
         raise ValueError(msg)
     return result
 
@@ -349,10 +348,10 @@ def to_zarr(
     elif isinstance(spec, GroupSpec):
         result = spec.to_zarr(store, path, overwrite=overwrite)
     else:
-        msg = f"""
-        Invalid argument for spec. Expected an instance of GroupSpec or ArraySpec, got
-        {type(spec)} instead.
-        """
+        msg = (
+            "Invalid argument for spec. Expected an instance of GroupSpec or ",
+            f"ArraySpec, got {type(spec)} instead.",
+        )
         raise ValueError(msg)
 
     return result
