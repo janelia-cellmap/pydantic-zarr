@@ -20,7 +20,7 @@ Note that `to_zarr` will *not* write any array data. You have to do this separat
 from zarr import group
 from zarr.creation import create
 from zarr.storage import MemoryStore
-from pydantic_zarr import GroupSpec
+from pydantic_zarr.v2 import GroupSpec
 
 # create an in-memory Zarr group + array with attributes
 grp = group(path='foo')
@@ -29,7 +29,8 @@ arr = create(path='foo/bar', store=grp.store, shape=(10,), compressor=None)
 arr.attrs.put({'array_metadata': True})
 
 spec = GroupSpec.from_zarr(grp)
-print(spec.dict())
+spec_dict = spec.model_dump()
+print(spec_dict)
 """
 {
     'zarr_version': 2,
@@ -41,7 +42,7 @@ print(spec.dict())
             'shape': (10,),
             'chunks': (10,),
             'dtype': '<f8',
-            'fill_value': 0,
+            'fill_value': 0.0,
             'order': 'C',
             'filters': None,
             'dimension_separator': '.',
@@ -52,11 +53,10 @@ print(spec.dict())
 """
 
 # modify the spec to define a new Zarr hierarchy
-spec2 = spec.copy()
-spec2.attributes = {'a': 100, 'b': 'metadata'}
-
-spec2.members['bar'].shape = (100,)
-
+spec_dict2 = spec_dict.copy()
+spec_dict2['attributes'] = {'a': 100, 'b': 'metadata'}
+spec_dict2['members']['bar']['shape'] = [100,]
+spec2 = GroupSpec(**spec_dict2)
 # serialize the spec to the store
 group2 = spec2.to_zarr(grp.store, path='foo2')
 
@@ -81,7 +81,7 @@ The `ArraySpec` class has a `from_array` static method that takes a numpy-array-
 from pydantic_zarr import ArraySpec
 import numpy as np
 
-print(ArraySpec.from_array(np.arange(10)).dict())
+print(ArraySpec.from_array(np.arange(10)).model_dump())
 """
 {
     'zarr_version': 2,
@@ -156,7 +156,7 @@ members = {'foo': ArraySpec(attributes={},
                             dtype='uint8', 
                             chunks=(1,), 
                             compressor=None)}
-print(ArraysOnlyGroup(attributes={}, members=members).dict())
+print(ArraysOnlyGroup(attributes={}, members=members).model_dump())
 """
 {
     'zarr_version': 2,

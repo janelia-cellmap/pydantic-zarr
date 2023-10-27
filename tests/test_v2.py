@@ -2,9 +2,10 @@ from pydantic import ValidationError
 import pytest
 import zarr
 from zarr.errors import ContainsGroupError
-from typing import Any, Literal, TypedDict, Union
+from typing import Any, Literal, Optional, Union
+from typing_extensions import TypedDict
 import numcodecs
-from pydantic_zarr.core import ArraySpec, GroupSpec, to_zarr, from_zarr
+from pydantic_zarr.v2 import ArraySpec, GroupSpec, to_zarr, from_zarr
 import numpy as np
 import numpy.typing as npt
 
@@ -15,7 +16,7 @@ import numpy.typing as npt
 @pytest.mark.parametrize("dimension_separator", (".", "/"))
 @pytest.mark.parametrize("compressor", (None, numcodecs.LZMA(), numcodecs.GZip()))
 @pytest.mark.parametrize(
-    "filters", (None, ("delta",), ("scale_offset",), ("delta", "scale_offset"))
+    "filters", (None, ["delta"], ["scale_offset"], ["delta", "scale_offset"])
 )
 def test_array_spec(
     chunks: tuple[int, ...],
@@ -23,12 +24,12 @@ def test_array_spec(
     dtype: str,
     dimension_separator: str,
     compressor: Any,
-    filters: tuple[str, ...],
+    filters: Optional[list[str]],
 ):
     store = zarr.MemoryStore()
 
     _filters = filters
-    if _filters is not None:
+    if filters is not None:
         _filters = []
 
         for filter in filters:
@@ -122,7 +123,7 @@ def test_array_spec_from_array(array: npt.NDArray[Any]):
     "compressor", (numcodecs.LZMA().get_config(), numcodecs.GZip())
 )
 @pytest.mark.parametrize(
-    "filters", (None, ("delta",), ("scale_offset",), ("delta", "scale_offset"))
+    "filters", (None, ["delta"], ["scale_offset"], ["delta", "scale_offset"])
 )
 def test_serde(
     chunks: tuple[int, ...],
@@ -130,11 +131,11 @@ def test_serde(
     dtype: str,
     dimension_separator: Literal[".", "/"],
     compressor: Any,
-    filters: tuple[str, ...],
+    filters: Optional[list[str]],
 ):
 
     _filters = filters
-    if _filters is not None:
+    if filters is not None:
         _filters = []
         for filter in filters:
             if filter == "delta":
@@ -211,7 +212,7 @@ def test_shape_chunks():
             ArraySpec(shape=(1,) * b, chunks=(1,) * a, dtype="uint8", attributes={})
 
 
-def test_validation():
+def test_validation() -> None:
     class GroupAttrsA(TypedDict):
         group_a: bool
 

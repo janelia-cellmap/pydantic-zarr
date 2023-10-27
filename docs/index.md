@@ -9,7 +9,7 @@ Static typing and runtime validation for Zarr hiearchies.
 
 ```python
 import zarr
-from pydantic_zarr import GroupSpec
+from pydantic_zarr.v2 import GroupSpec
 
 group = zarr.group(path='foo')
 array = zarr.create(store = group.store, path='foo/bar', shape=10, dtype='uint8')
