@@ -8,6 +8,7 @@ from typing import (
     Optional,
     TypeVar,
     Union,
+    overload,
 )
 from pydantic import BaseModel, model_validator, field_validator
 
@@ -255,12 +256,12 @@ class GroupSpec(StrictBase, Generic[TAttr, TItem]):
 
 
 @overload
-def from_zarr(element: zarr.Array) -> ArraySpec:
+def from_zarr(element: zarr.Group) -> GroupSpec:
     ...
 
 
 @overload
-def from_zarr(element: zarr.Group) -> GroupSpec:
+def from_zarr(element: zarr.Array) -> ArraySpec:
     ...
 
 

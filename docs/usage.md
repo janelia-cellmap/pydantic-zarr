@@ -106,6 +106,7 @@ print(ArraySpec.from_array(np.arange(10)).model_dump())
 The following examples demonstrate how to specialize `GroupSpec` and `ArraySpec` with type parameters. By specializing `GroupSpec` or `ArraySpec` in this way, python type checkers and Pydantic can type-check elements of a Zarr hierarchy.
 
 ```python
+import sys
 from pydantic_zarr.v2 import GroupSpec, ArraySpec, TItem, TAttr
 from pydantic import ValidationError
 from typing import Any
@@ -116,12 +117,12 @@ else:
     from typing import TypedDict
 
 # a Pydantic BaseModel would also work here
-class Groupattributes(TypedDict):
+class GroupAttrs(TypedDict):
     a: int
     b: int
 
-# a Zarr group with attributes consistent with Groupattributes
-SpecificattributesGroup = GroupSpec[Groupattributes, TItem]
+# a Zarr group with attributes consistent with GroupAttrs
+SpecificAttrsGroup = GroupSpec[GroupAttrs, TItem]
 
 try:
     SpecificAttrsGroup(attributes={'a' : 10, 'b': 'foo'})
@@ -131,7 +132,7 @@ except ValidationError as exc:
     1 validation error for GroupSpec[GroupAttrs, ~TItem]
     attributes.b
       Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='foo', input_type=str]
-        For further information visit https://errors.pydantic.dev/2.1.2/v/int_parsing
+        For further information visit https://errors.pydantic.dev/2.4/v/int_parsing
     """
 
 # this passes validation
@@ -150,7 +151,7 @@ except ValidationError as exc:
     1 validation error for GroupSpec[~TAttr, ArraySpec]
     members.foo
       Input should be a valid dictionary or instance of ArraySpec [type=model_type, input_value=GroupSpec(zarr_version=2,...tributes={}, members={}), input_type=GroupSpec]
-        For further information visit https://errors.pydantic.dev/2.1.2/v/model_type
+        For further information visit https://errors.pydantic.dev/2.4/v/model_type
     """
 
 # this passes validation

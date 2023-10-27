@@ -2,7 +2,7 @@ from pydantic import ValidationError
 import pytest
 import zarr
 from zarr.errors import ContainsGroupError
-from typing import Any, Literal
+from typing import Any, Literal, Union
 import numcodecs
 from pydantic_zarr.v2 import ArraySpec, GroupSpec, to_zarr, from_zarr
 import numpy as np
@@ -13,6 +13,7 @@ if sys.version_info < (3, 12):
     from typing_extensions import TypedDict
 else:
     from typing import TypedDict
+
 
 @pytest.mark.parametrize("chunks", ((1,), (1, 2), ((1, 2, 3))))
 @pytest.mark.parametrize("order", ("C", "F"))
@@ -137,7 +138,6 @@ def test_serde(
     compressor: Any,
     filters: tuple[str, ...],
 ):
-
     _filters = filters
     if _filters is not None:
         _filters = []
@@ -209,6 +209,7 @@ def test_serde(
     group3 = spec.to_zarr(store, "/group_b")
     observed = spec.from_zarr(group3)
     assert observed == spec
+
 
 def test_shape_chunks():
     for a, b in zip(range(1, 5), range(2, 6)):
