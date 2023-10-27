@@ -17,7 +17,7 @@ array.attrs.put({'metadata': 'hello'})
 
 # this is a pydantic model
 spec = GroupSpec.from_zarr(group)
-print(spec.dict())
+print(spec.model_dump())
 """
 {
     'zarr_version': 2,
