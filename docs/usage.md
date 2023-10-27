@@ -33,11 +33,11 @@ print(spec.model_dump())
 """
 {
     'zarr_version': 2,
-    'attrs': {'group_metadata': 10},
-    'items': {
+    'attributes': {'group_metadata': 10},
+    'members': {
         'bar': {
             'zarr_version': 2,
-            'attrs': {'array_metadata': True},
+            'attributes': {'array_metadata': True},
             'shape': (10,),
             'chunks': (10,),
             'dtype': '<f8',
@@ -51,14 +51,17 @@ print(spec.model_dump())
 }
 """
 
-# modify the spec to define a new Zarr hierarchy
-spec2 = spec.model_copy()
-spec2.attrs = {'a': 100, 'b': 'metadata'}
+# convert the spec to a dict so we can modify it
+spec_dict2 = spec.model_dump()
 
-spec2.items['bar'].shape = (100,)
+# change the group metadata
+spec_dict2['attributes'] = {'a': 100, 'b': 'metadata'}
+
+# change the properties of an array member
+spec_dict2['members']['bar']['shape'] = (100,)
 
 # serialize the spec to the store
-group2 = spec2.to_zarr(grp.store, path='foo2')
+group2 = GroupSpec(**spec_dict2).to_zarr(grp.store, path='foo2')
 
 print(group2)
 #> <zarr.hierarchy.Group '/foo2'>
@@ -85,7 +88,7 @@ print(ArraySpec.from_array(np.arange(10)).model_dump())
 """
 {
     'zarr_version': 2,
-    'attrs': {},
+    'attributes': {},
     'shape': (10,),
     'chunks': (10,),
     'dtype': '<i8',
@@ -105,8 +108,7 @@ The following examples demonstrate how to specialize `GroupSpec` and `ArraySpec`
 ```python
 import sys
 
-from pydantic_zarr import GroupSpec, ArraySpec
-from pydantic_zarr.core import TItem, TAttr
+from pydantic_zarr.v2 import GroupSpec, ArraySpec, TItem, TAttr
 from pydantic import ValidationError
 from typing import Any
 
@@ -124,50 +126,50 @@ class GroupAttrs(TypedDict):
 SpecificAttrsGroup = GroupSpec[GroupAttrs, TItem]
 
 try:
-    SpecificAttrsGroup(attrs={'a' : 10, 'b': 'foo'})
+    SpecificAttrsGroup(attributes={'a' : 10, 'b': 'foo'})
 except ValidationError as exc:
     print(exc)
     """
     1 validation error for GroupSpec[GroupAttrs, ~TItem]
-    attrs.b
+    attributes.b
       Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='foo', input_type=str]
         For further information visit https://errors.pydantic.dev/2.1.2/v/int_parsing
     """
 
 # this passes validation
-print(SpecificAttrsGroup(attrs={'a': 100, 'b': 100}))
-#> zarr_version=2 attrs={'a': 100, 'b': 100} items={}
+print(SpecificAttrsGroup(attributes={'a': 100, 'b': 100}))
+#> zarr_version=2 attributes={'a': 100, 'b': 100} members={}
 
 # a Zarr group that only contains arrays -- no subgroups!
 # we re-use the TAttrs type variable defined in pydantic_zarr.core
 ArraysOnlyGroup = GroupSpec[TAttr, ArraySpec]
 
 try:
-    ArraysOnlyGroup(attrs={}, items={'foo': GroupSpec(attrs={})})
+    ArraysOnlyGroup(attributes={}, members={'foo': GroupSpec(attributes={})})
 except ValidationError as exc:
     print(exc)
     """
     1 validation error for GroupSpec[~TAttr, ArraySpec]
-    items.foo
-      Input should be a valid dictionary or instance of ArraySpec [type=model_type, input_value=GroupSpec(zarr_version=2, attrs={}, items={}), input_type=GroupSpec]
+    members.foo
+      Input should be a valid dictionary or instance of ArraySpec [type=model_type, input_value=GroupSpec(zarr_version=2,...tributes={}, members={}), input_type=GroupSpec]
         For further information visit https://errors.pydantic.dev/2.1.2/v/model_type
     """
 
 # this passes validation
-items = {'foo': ArraySpec(attrs={},
+items = {'foo': ArraySpec(attributes={},
                           shape=(1,),
                           dtype='uint8',
                           chunks=(1,),
                           compressor=None)}
-print(ArraysOnlyGroup(attrs={}, items=items).model_dump())
+print(ArraysOnlyGroup(attributes={}, members=items).model_dump())
 """
 {
     'zarr_version': 2,
-    'attrs': {},
-    'items': {
+    'attributes': {},
+    'members': {
         'foo': {
             'zarr_version': 2,
-            'attrs': {},
+            'attributes': {},
             'shape': (1,),
             'chunks': (1,),
             'dtype': '|u1',
