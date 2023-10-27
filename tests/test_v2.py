@@ -4,7 +4,7 @@ import zarr
 from zarr.errors import ContainsGroupError
 from typing import Any, Literal, TypedDict, Union
 import numcodecs
-from pydantic_zarr.core import ArraySpec, GroupSpec, to_zarr, from_zarr
+from pydantic_zarr.v2 import ArraySpec, GroupSpec, to_zarr, from_zarr
 import numpy as np
 import numpy.typing as npt
 
@@ -53,7 +53,7 @@ def test_array_spec(
 
     assert spec.zarr_version == array._version
     assert spec.dtype == array.dtype
-    assert spec.attrs == array.attrs
+    assert spec.attributes == array.attrs
     assert spec.chunks == array.chunks
 
     assert spec.dimension_separator == array._dimension_separator
@@ -77,7 +77,7 @@ def test_array_spec(
 
     assert spec.zarr_version == array2._version
     assert spec.dtype == array2.dtype
-    assert spec.attrs == array2.attrs
+    assert spec.attributes == array2.attrs
     assert spec.chunks == array2.chunks
 
     if array2.compressor is not None:
@@ -102,13 +102,13 @@ def test_array_spec_from_array(array: npt.NDArray[Any]):
     assert np.dtype(spec.dtype) == array.dtype
     assert spec.shape == array.shape
     assert spec.chunks == array.shape
-    assert spec.attrs == {}
+    assert spec.attributes == {}
 
     attrs = {"foo": 10}
     chunks = (1,) * array.ndim
-    spec2 = ArraySpec.from_array(array, attrs=attrs, chunks=chunks)
+    spec2 = ArraySpec.from_array(array, attributes=attrs, chunks=chunks)
     assert spec2.chunks == chunks
-    assert spec2.attrs == attrs
+    assert spec2.attributes == attrs
     assert spec.dtype == array.dtype.str
     assert np.dtype(spec.dtype) == array.dtype
     assert spec.shape == array.shape
@@ -158,7 +158,7 @@ def test_serde(
     store = zarr.MemoryStore()
 
     spec = GroupSpec[RootAttrs, Union[ArraySpec, SubGroup]](
-        attrs=RootAttrs(foo=10, bar=[0, 1, 2]),
+        attributes=RootAttrs(foo=10, bar=[0, 1, 2]),
         members={
             "s0": ArraySpec(
                 shape=(10,) * len(chunks),
@@ -168,7 +168,7 @@ def test_serde(
                 compressor=compressor,
                 order=order,
                 dimension_separator=dimension_separator,
-                attrs=ArrayAttrs(scale=[1.0]),
+                attributes=ArrayAttrs(scale=[1.0]),
             ),
             "s1": ArraySpec(
                 shape=(5,) * len(chunks),
@@ -178,9 +178,9 @@ def test_serde(
                 compressor=compressor,
                 order=order,
                 dimension_separator=dimension_separator,
-                attrs=ArrayAttrs(scale=[2.0]),
+                attributes=ArrayAttrs(scale=[2.0]),
             ),
-            "subgroup": SubGroup(attrs=SubGroupAttrs(a="foo", b=1.0)),
+            "subgroup": SubGroup(attributes=SubGroupAttrs(a="foo", b=1.0)),
         },
     )
     # materialize a zarr group, based on the spec
@@ -206,9 +206,9 @@ def test_serde(
 def test_shape_chunks():
     for a, b in zip(range(1, 5), range(2, 6)):
         with pytest.raises(ValidationError):
-            ArraySpec(shape=(1,) * a, chunks=(1,) * b, dtype="uint8", attrs={})
+            ArraySpec(shape=(1,) * a, chunks=(1,) * b, dtype="uint8", attributes={})
         with pytest.raises(ValidationError):
-            ArraySpec(shape=(1,) * b, chunks=(1,) * a, dtype="uint8", attrs={})
+            ArraySpec(shape=(1,) * b, chunks=(1,) * a, dtype="uint8", attributes={})
 
 
 def test_validation():
@@ -232,10 +232,10 @@ def test_validation():
     store = zarr.MemoryStore
 
     specA = GroupA(
-        attrs=GroupAttrsA(group_a=True),
+        attributes=GroupAttrsA(group_a=True),
         members={
             "a": ArrayA(
-                attrs=ArrayAttrsA(array_a=True),
+                attributes=ArrayAttrsA(array_a=True),
                 shape=(100,),
                 dtype="uint8",
                 chunks=(10,),
@@ -244,10 +244,10 @@ def test_validation():
     )
 
     specB = GroupB(
-        attrs=GroupAttrsB(group_b=True),
+        attributes=GroupAttrsB(group_b=True),
         members={
             "a": ArrayB(
-                attrs=ArrayAttrsB(array_b=True),
+                attributes=ArrayAttrsB(array_b=True),
                 shape=(100,),
                 dtype="uint8",
                 chunks=(10,),
@@ -275,10 +275,10 @@ def test_from_array(shape, dtype):
     assert spec.shape == template.shape
     assert np.dtype(spec.dtype) == np.dtype(template.dtype)
     assert spec.chunks == template.shape
-    assert spec.attrs == {}
+    assert spec.attributes == {}
 
     chunks = template.ndim * (1,)
     attrs = {"foo": 100}
-    spec2 = ArraySpec.from_array(template, chunks=chunks, attrs=attrs)
+    spec2 = ArraySpec.from_array(template, chunks=chunks, attributes=attrs)
     assert spec2.chunks == chunks
-    assert spec2.attrs == attrs
+    assert spec2.attributes == attrs

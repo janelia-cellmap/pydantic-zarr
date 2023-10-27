@@ -20,7 +20,7 @@ Note that `to_zarr` will *not* write any array data. You have to do this separat
 from zarr import group
 from zarr.creation import create
 from zarr.storage import MemoryStore
-from pydantic_zarr import GroupSpec
+from pydantic_zarr.v2 import GroupSpec
 
 # create an in-memory Zarr group + array with attributes
 grp = group(path='foo')
@@ -33,11 +33,11 @@ print(spec.dict())
 """
 {
     'zarr_version': 2,
-    'attrs': {'group_metadata': 10},
+    'attributes': {'group_metadata': 10},
     'members': {
         'bar': {
             'zarr_version': 2,
-            'attrs': {'array_metadata': True},
+            'attributes': {'array_metadata': True},
             'shape': (10,),
             'chunks': (10,),
             'dtype': '<f8',
@@ -53,7 +53,7 @@ print(spec.dict())
 
 # modify the spec to define a new Zarr hierarchy
 spec2 = spec.copy()
-spec2.attrs = {'a': 100, 'b': 'metadata'}
+spec2.attributes = {'a': 100, 'b': 'metadata'}
 
 spec2.members['bar'].shape = (100,)
 
@@ -78,14 +78,14 @@ print(dict(group2['bar'].attrs))
 The `ArraySpec` class has a `from_array` static method that takes a numpy-array-like object and returns an `ArraySpec` with `shape` and `dtype` fields matching those of the array-like object.
 
 ```python
-from pydantic_zarr import ArraySpec
+from pydantic_zarr.v2 import ArraySpec
 import numpy as np
 
 print(ArraySpec.from_array(np.arange(10)).dict())
 """
 {
     'zarr_version': 2,
-    'attrs': {},
+    'attributes': {},
     'shape': (10,),
     'chunks': (10,),
     'dtype': '<i8',
@@ -103,39 +103,38 @@ print(ArraySpec.from_array(np.arange(10)).dict())
 The following examples demonstrate how to specialize `GroupSpec` and `ArraySpec` with type parameters. By specializing `GroupSpec` or `ArraySpec` in this way, python type checkers and Pydantic can type-check elements of a Zarr hierarchy.
 
 ```python
-from pydantic_zarr import GroupSpec, ArraySpec
-from pydantic_zarr.core import TItem, TAttr
+from pydantic_zarr.v2 import GroupSpec, ArraySpec, TItem, TAttr
 from pydantic import ValidationError
 from typing import Any, TypedDict
 
 # a Pydantic BaseModel would also work here
-class GroupAttrs(TypedDict):
+class Groupattributes(TypedDict):
     a: int
     b: int
 
-# a Zarr group with attributes consistent with GroupAttrs
-SpecificAttrsGroup = GroupSpec[GroupAttrs, TItem]
+# a Zarr group with attributes consistent with Groupattributes
+SpecificattributesGroup = GroupSpec[Groupattributes, TItem]
 
 try:
-    SpecificAttrsGroup(attrs={'a' : 10, 'b': 'foo'})
+    SpecificattributesGroup(attributes={'a' : 10, 'b': 'foo'})
 except ValidationError as exc:
     print(exc)
     """
-    1 validation error for GroupSpec[GroupAttrs, TItem]
-    attrs -> b
+    1 validation error for GroupSpec[Groupattributes, TItem]
+    attributes -> b
       value is not a valid integer (type=type_error.integer)
     """
 
 # this passes validation
-print(SpecificAttrsGroup(attrs={'a': 100, 'b': 100}))
-#> zarr_version=2 attrs={'a': 100, 'b': 100} members={}
+print(SpecificattributesGroup(attributes={'a': 100, 'b': 100}))
+#> zarr_version=2 attributes={'a': 100, 'b': 100} members={}
 
 # a Zarr group that only contains arrays -- no subgroups!
-# we re-use the TAttrs type variable defined in pydantic_zarr.core
+# we re-use the Tattributes type variable defined in pydantic_zarr.core
 ArraysOnlyGroup = GroupSpec[TAttr, ArraySpec]
 
 try:
-    ArraysOnlyGroup(attrs={}, members={'foo': GroupSpec(attrs={})})
+    ArraysOnlyGroup(attributes={}, members={'foo': GroupSpec(attributes={})})
 except ValidationError as exc:
     print(exc)
     """
@@ -151,20 +150,20 @@ except ValidationError as exc:
     """
 
 # this passes validation
-members = {'foo': ArraySpec(attrs={}, 
+members = {'foo': ArraySpec(attributes={}, 
                             shape=(1,), 
                             dtype='uint8', 
                             chunks=(1,), 
                             compressor=None)}
-print(ArraysOnlyGroup(attrs={}, members=members).dict())
+print(ArraysOnlyGroup(attributes={}, members=members).dict())
 """
 {
     'zarr_version': 2,
-    'attrs': {},
+    'attributes': {},
     'members': {
         'foo': {
             'zarr_version': 2,
-            'attrs': {},
+            'attributes': {},
             'shape': (1,),
             'chunks': (1,),
             'dtype': '|u1',
