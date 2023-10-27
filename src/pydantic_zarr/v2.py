@@ -2,19 +2,17 @@ from __future__ import annotations
 
 from typing import (
     Any,
-    Dict,
     Generic,
     Literal,
     Mapping,
     Optional,
-    Sequence,
     TypeVar,
     Union,
     overload,
 )
 from typing_extensions import Annotated
-from pydantic import BaseModel, model_validator
-from pydantic.functional_validators import AfterValidator, BeforeValidator
+from pydantic import BaseModel, field_validator
+from pydantic.functional_validators import BeforeValidator
 from zarr.storage import init_group, BaseStore
 import numcodecs
 import zarr
@@ -26,36 +24,24 @@ from numcodecs.abc import Codec
 from pydantic_zarr.core import StrictBase
 
 TAttr = TypeVar("TAttr", bound=Union[Mapping[str, Any], BaseModel])
-TItem = TypeVar("TItem", bound=Union["ArraySpec", "GroupSpec"])
+TItem = TypeVar("TItem", bound=Union["GroupSpec", "ArraySpec"])
 
 DimensionSeparator = Union[Literal["."], Literal["/"]]
 ZarrVersion = Union[Literal[2], Literal[3]]
 ArrayOrder = Union[Literal["C"], Literal["F"]]
 
 
-def stringify_dtype(v: npt.DTypeLike):
+def stringify_dtype(v: npt.DTypeLike) -> str:
     """
     Convert a np.dtype-like object into a string
     """
     return np.dtype(v).str
 
 
-DtypeStr = Annotated[str, AfterValidator(stringify_dtype)]
+DtypeStr = Annotated[str, BeforeValidator(stringify_dtype)]
 
 
-def dictify_codec(v: Any) -> Any:
-    """
-    Convert a numcodecs codec to json-compatible dict
-    """
-    if isinstance(v, Codec):
-        v = v.get_config()
-    return v
-
-
-CodecLike = Annotated[Dict[str, Any], BeforeValidator(dictify_codec)]
-
-
-class NodeSpecV2(StrictBase, Generic[TAttr]):
+class NodeSpecV2(StrictBase):
     """
     The base class for ArraySpec and GroupSpec.
     """
@@ -71,24 +57,37 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
     """
 
     attributes: TAttr
-    shape: Sequence[int]
-    chunks: Sequence[int]
-    dtype: DtypeStr
+    shape: tuple[int, ...]
+    chunks: tuple[int, ...]
+    dtype: str
     fill_value: Union[None, int, float] = 0
     order: ArrayOrder = "C"
-    filters: Optional[list[CodecLike]] = None
+    filters: Optional[list[dict[str, Any]]] = None
     dimension_separator: DimensionSeparator = "/"
-    compressor: Optional[CodecLike] = None
+    compressor: Optional[dict[str, Any]] = None
 
-    @model_validator(mode="after")
-    def check_ndim(self) -> "ArraySpec":
-        if len(self.shape) != len(self.chunks):
-            msg = (
-                f"Length of shape must match length of chunks. Got {len(self.shape)} "
-                f"elements for shape, but {len(self.chunks)} elements for chunks."
-            )
-            raise ValueError(msg)
-        return self
+    @field_validator("dtype", mode="before")
+    def stringify_dtype(cls, v):
+        """
+        Convert a np.dtype object into a string
+        """
+        return np.dtype(v).str
+
+    @field_validator("compressor", mode="before")
+    def jsonify_compressor(cls, v):
+        if isinstance(v, Codec):
+            v = v.get_config()
+        return v
+
+    @field_validator("filters", mode="before")
+    def jsonify_filters(cls, v):
+        if v is not None:
+            try:
+                v = [element.get_config() for element in v]
+                return v
+            except AttributeError:
+                pass
+        return v
 
     @classmethod
     def from_array(cls, array: npt.NDArray[Any], **kwargs):
@@ -180,7 +179,7 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
 
 class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
     attributes: TAttr
-    members: Mapping[str, TItem] = {}
+    members: dict[str, TItem] = {}
 
     # @field_validator('members')
     # def validate_members():
@@ -204,7 +203,7 @@ class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
         """
 
         result: GroupSpec[TAttr, TItem]
-        members = {}
+        members: dict[str, Union[ArraySpec, GroupSpec]] = {}
         for name, member in group.items():
             if isinstance(member, zarr.Array):
                 _item = ArraySpec.from_zarr(member)
