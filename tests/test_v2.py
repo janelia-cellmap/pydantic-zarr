@@ -4,7 +4,7 @@ import zarr
 from zarr.errors import ContainsGroupError
 from typing import Any, Literal, TypedDict, Union
 import numcodecs
-from pydantic_zarr.core import ArraySpec, GroupSpec, to_zarr, from_zarr
+from pydantic_zarr.v2 import ArraySpec, GroupSpec, to_zarr, from_zarr
 import numpy as np
 import numpy.typing as npt
 

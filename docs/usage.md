@@ -20,7 +20,7 @@ Note that `to_zarr` will *not* write any array data. You have to do this separat
 from zarr import group
 from zarr.creation import create
 from zarr.storage import MemoryStore
-from pydantic_zarr import GroupSpec
+from pydantic_zarr.v2 import GroupSpec
 
 # create an in-memory Zarr group + array with attributes
 grp = group(path='foo')
@@ -78,7 +78,7 @@ print(dict(group2['bar'].attrs))
 The `ArraySpec` class has a `from_array` static method that takes a numpy-array-like object and returns an `ArraySpec` with `shape` and `dtype` fields matching those of the array-like object.
 
 ```python
-from pydantic_zarr import ArraySpec
+from pydantic_zarr.v2 import ArraySpec
 import numpy as np
 
 print(ArraySpec.from_array(np.arange(10)).dict())
@@ -103,8 +103,7 @@ print(ArraySpec.from_array(np.arange(10)).dict())
 The following examples demonstrate how to specialize `GroupSpec` and `ArraySpec` with type parameters. By specializing `GroupSpec` or `ArraySpec` in this way, python type checkers and Pydantic can type-check elements of a Zarr hierarchy.
 
 ```python
-from pydantic_zarr import GroupSpec, ArraySpec
-from pydantic_zarr.core import TItem, TAttr
+from pydantic_zarr.v2 import GroupSpec, ArraySpec, TItem, TAttr
 from pydantic import ValidationError
 from typing import Any, TypedDict
 
