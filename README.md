@@ -28,11 +28,11 @@ print(spec.dict())
 """
 {
     'zarr_version': 2,
-    'attrs': {},
+    'attributes': {},
     'members': {
         'bar': {
             'zarr_version': 2,
-            'attrs': {'metadata': 'hello'},
+            'attributes': {'metadata': 'hello'},
             'shape': (10,),
             'chunks': (10,),
             'dtype': '|u1',
