@@ -10,8 +10,9 @@ from typing import (
     Union,
     overload,
 )
-from pydantic import BaseModel, model_validator, field_validator
-
+from typing_extensions import Annotated
+from pydantic import BaseModel, model_validator
+from pydantic.functional_validators import BeforeValidator
 from zarr.storage import init_group, BaseStore
 import numcodecs
 import zarr
@@ -30,6 +31,56 @@ ZarrVersion = Union[Literal[2], Literal[3]]
 ArrayOrder = Union[Literal["C"], Literal["F"]]
 
 
+def stringify_dtype(value: npt.DTypeLike):
+    """
+    Convert a np.dtype object into a string
+
+    Paramters
+    ---------
+
+    value: DTypeLike
+        Some object that can be coerced to a numpy dtype
+
+    Returns
+    -------
+
+    A numpy dtype string representation of the input.
+    """
+    return np.dtype(value).str
+
+
+DtypeStr = Annotated[str, BeforeValidator(stringify_dtype)]
+
+
+def dictify_codec(value: Union[dict[str, Any], Codec]) -> dict[str, Any]:
+    """
+    Ensure that a numcodecs `Codec` is converted to a dict. If the input is not an
+    insance of `numcodecs.abc.Codec`, then it is assumed to be a dict with string keys
+    and it is returned unaltered.
+
+    Paramters
+    ---------
+
+    value : Union[dict[str, Any], numcodecs.abc.Codec]
+        The value to be dictified if it is not already a dict.
+
+    Returns
+    -------
+
+    If the input was a `Codec`, then the result of calling `get_config()` on that
+    object is returned. This should be a dict with string keys. All other values pass
+    through unaltered.
+    """
+    if isinstance(value, Codec):
+        result = value.get_config()
+    else:
+        result = value
+    return result
+
+
+CodecDict = Annotated[dict[str, Any], BeforeValidator(dictify_codec)]
+
+
 class ArraySpec(StrictBase, Generic[TAttr]):
     """
     This pydantic model represents the structural properties of a zarr array.
@@ -41,46 +92,25 @@ class ArraySpec(StrictBase, Generic[TAttr]):
     attributes: TAttr
     shape: tuple[int, ...]
     chunks: tuple[int, ...]
-    dtype: str
+    dtype: DtypeStr
     fill_value: Union[None, int, float] = 0
     order: ArrayOrder = "C"
-    filters: Optional[list[dict[str, Any]]] = None
+    filters: Optional[list[CodecDict]] = None
     dimension_separator: DimensionSeparator = "/"
-    compressor: Optional[dict[str, Any]] = None
+    compressor: Optional[CodecDict] = None
 
-    @field_validator("dtype", mode="before")
-    def stringify_dtype(cls, v):
+    @model_validator(mode="after")
+    def check_ndim(cls, value):
         """
-        Convert a np.dtype object into a string
+        Check that the length of shape and chunks matches.
         """
-        return np.dtype(v).str
-
-    @field_validator("compressor", mode="before")
-    def jsonify_compressor(cls, v):
-        if isinstance(v, Codec):
-            v = v.get_config()
-        return v
-
-    @field_validator("filters", mode="before")
-    def jsonify_filters(cls, v):
-        if v is not None:
-            try:
-                v = [element.get_config() for element in v]
-                return v
-            except AttributeError:
-                pass
-        return v
-
-    @model_validator(mode="before")
-    def check_ndim(cls, values):
-        if "shape" in values and "chunks" in values:
-            if (lshape := len(values["shape"])) != (lchunks := len(values["chunks"])):
-                msg = f"""
-                Length of shape must match length of chunks. Got {lshape} elements
-                for shape and {lchunks} elements for chunks.
-                """
-                raise ValueError(msg)
-        return values
+        if (lshape := len(value.shape)) != (lchunks := len(value.chunks)):
+            msg = (
+                f"Length of shape must match length of chunks. Got {lshape} elements",
+                f"for shape and {lchunks} elements for chunks.",
+            )
+            raise ValueError(msg)
+        return value
 
     @classmethod
     def from_array(cls, array: npt.NDArray[Any], **kwargs):
@@ -307,6 +337,26 @@ def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupS
         )
         raise ValueError(msg)
     return result
+
+
+@overload
+def to_zarr(
+    spec: ArraySpec,
+    store: BaseStore,
+    path: str,
+    overwrite: bool = False,
+) -> zarr.Array:
+    ...
+
+
+@overload
+def to_zarr(
+    spec: GroupSpec,
+    store: BaseStore,
+    path: str,
+    overwrite: bool = False,
+) -> zarr.Group:
+    ...
 
 
 def to_zarr(
