@@ -202,9 +202,11 @@ class GroupSpec(StrictBase, Generic[TAttr, TItem]):
         items = {}
         for name, item in group.items():
             if isinstance(item, zarr.Array):
-                _item = ArraySpec.from_zarr(item)
+                # convert to dict before the final typed GroupSpec construction
+                _item = ArraySpec.from_zarr(item).model_dump()
             elif isinstance(item, zarr.Group):
-                _item = GroupSpec.from_zarr(item)
+                # convert to dict before the final typed GroupSpec construction
+                _item = GroupSpec.from_zarr(item).model_dump()
             else:
                 msg = (
                     f"Unparseable object encountered: {type(item)}. Expected zarr.Array"
@@ -267,11 +269,11 @@ def from_zarr(element: zarr.Array) -> ArraySpec:
 
 def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupSpec]:
     """
-    Recursively parse a Zarr group or Zarr array into an ArraySpec or GroupSpec.
+    Recursively parse a Zarr group or Zarr array into an untyped ArraySpec or GroupSpec.
 
     Parameters
     ---------
-    element : a zarr Array or zarr Group
+    element : Union[zarr.Array, zarr.Group]
 
     Returns
     -------

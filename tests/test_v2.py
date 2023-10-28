@@ -185,7 +185,7 @@ def test_serde(
                 dimension_separator=dimension_separator,
                 attributes=ArrayAttrs(scale=[2.0]),
             ),
-            "subgroup": GroupSpec(attributes=SubGroupAttrs(a="foo", b=1.0)),
+            "subgroup": SubGroup(attributes=SubGroupAttrs(a="foo", b=1.0)),
         },
     )
     # check that the model round-trips dict representation
