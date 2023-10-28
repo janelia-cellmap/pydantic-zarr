@@ -2,11 +2,18 @@ from pydantic import ValidationError
 import pytest
 import zarr
 from zarr.errors import ContainsGroupError
-from typing import Any, Literal, TypedDict, Union
+from typing import Any, Literal, Union, Optional
 import numcodecs
+from numcodecs.abc import Codec
 from pydantic_zarr.v2 import ArraySpec, GroupSpec, to_zarr, from_zarr
 import numpy as np
 import numpy.typing as npt
+import sys
+
+if sys.version_info < (3, 12):
+    from typing_extensions import TypedDict
+else:
+    from typing import TypedDict
 
 
 @pytest.mark.parametrize("chunks", ((1,), (1, 2), ((1, 2, 3))))
@@ -22,20 +29,20 @@ def test_array_spec(
     order: str,
     dtype: str,
     dimension_separator: str,
-    compressor: Any,
-    filters: tuple[str, ...],
+    compressor: Optional[Codec],
+    filters: Optional[tuple[str, ...]],
 ):
     store = zarr.MemoryStore()
-
-    _filters = filters
-    if _filters is not None:
+    _filters: Optional[list[Codec]]
+    if filters is not None:
         _filters = []
-
         for filter in filters:
             if filter == "delta":
                 _filters.append(numcodecs.Delta(dtype))
             if filter == "scale_offset":
                 _filters.append(numcodecs.FixedScaleOffset(0, 1.0, dtype=dtype))
+    else:
+        _filters = filters
 
     array = zarr.create(
         (100,) * len(chunks),
@@ -124,7 +131,7 @@ def test_array_spec_from_array(array: npt.NDArray[Any]):
 @pytest.mark.parametrize(
     "filters", (None, ("delta",), ("scale_offset",), ("delta", "scale_offset"))
 )
-def test_serde(
+def test_serialize_deserialize_groupspec(
     chunks: tuple[int, ...],
     order: Literal["C", "F"],
     dtype: str,
@@ -132,7 +139,6 @@ def test_serde(
     compressor: Any,
     filters: tuple[str, ...],
 ):
-
     _filters = filters
     if _filters is not None:
         _filters = []
@@ -160,7 +166,7 @@ def test_serde(
     spec = GroupSpec[RootAttrs, Union[ArraySpec, SubGroup]](
         attributes=RootAttrs(foo=10, bar=[0, 1, 2]),
         members={
-            "s0": ArraySpec(
+            "s0": ArraySpec[ArrayAttrs](
                 shape=(10,) * len(chunks),
                 chunks=chunks,
                 dtype=dtype,
@@ -170,7 +176,7 @@ def test_serde(
                 dimension_separator=dimension_separator,
                 attributes=ArrayAttrs(scale=[1.0]),
             ),
-            "s1": ArraySpec(
+            "s1": ArraySpec[ArrayAttrs](
                 shape=(5,) * len(chunks),
                 chunks=chunks,
                 dtype=dtype,
@@ -183,6 +189,9 @@ def test_serde(
             "subgroup": SubGroup(attributes=SubGroupAttrs(a="foo", b=1.0)),
         },
     )
+    # check that the model round-trips dict representation
+    assert spec == GroupSpec(**spec.model_dump())
+
     # materialize a zarr group, based on the spec
     group = to_zarr(spec, store, "/group_a")
 
@@ -190,10 +199,11 @@ def test_serde(
     observed = from_zarr(group)
     assert observed == spec
 
-    # materialize again
+    # check that we can't overwrite the original group
     with pytest.raises(ContainsGroupError):
         group = to_zarr(spec, store, "/group_a")
 
+    # materialize again with overwrite
     group2 = to_zarr(spec, store, "/group_a", overwrite=True)
     assert group2 == group
 
@@ -204,6 +214,9 @@ def test_serde(
 
 
 def test_shape_chunks():
+    """
+    Test that the length of the chunks and the shape match
+    """
     for a, b in zip(range(1, 5), range(2, 6)):
         with pytest.raises(ValidationError):
             ArraySpec(shape=(1,) * a, chunks=(1,) * b, dtype="uint8", attributes={})
@@ -211,7 +224,12 @@ def test_shape_chunks():
             ArraySpec(shape=(1,) * b, chunks=(1,) * a, dtype="uint8", attributes={})
 
 
-def test_validation():
+def test_validation() -> None:
+    """
+    Test that specialized GroupSpec and ArraySpec instances cannot be serialized from
+    the wrong inputs without a ValidationError.
+    """
+
     class GroupAttrsA(TypedDict):
         group_a: bool
 
@@ -255,9 +273,27 @@ def test_validation():
         },
     )
 
+    # check that we cannot create a specialized GroupSpec with the wrong attributes
+    with pytest.raises(ValidationError):
+        GroupB(
+            attributes=GroupAttrsA(group_a=True),
+            members={},
+        )
+
     store = zarr.MemoryStore()
     groupAMat = specA.to_zarr(store, path="group_a")
     groupBMat = specB.to_zarr(store, path="group_b")
+
+    GroupA.from_zarr(groupAMat)
+    GroupB.from_zarr(groupBMat)
+    ArrayA.from_zarr(groupAMat["a"])
+    ArrayB.from_zarr(groupBMat["a"])
+
+    with pytest.raises(ValidationError):
+        ArrayA.from_zarr(groupBMat["a"])
+
+    with pytest.raises(ValidationError):
+        ArrayB.from_zarr(groupAMat["a"])
 
     with pytest.raises(ValidationError):
         GroupB.from_zarr(groupAMat)

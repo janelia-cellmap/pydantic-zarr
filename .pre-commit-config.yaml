@@ -6,17 +6,17 @@ default_language_version:
   python: python3
 repos:
   - repo: https://github.com/psf/black
-    rev: 22.12.0
+    rev: 23.7.0
     hooks:
-    - id: black
-      language_version: python3.9
+      - id: black
+        language_version: python3.9
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
     hooks:
-    - id: check-yaml
+      - id: check-yaml
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     # Ruff version.
-    rev: 'v0.0.245'
+    rev: "v0.0.277"
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]

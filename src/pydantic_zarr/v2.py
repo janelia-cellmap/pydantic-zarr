@@ -10,8 +10,9 @@ from typing import (
     Union,
     overload,
 )
-from pydantic import BaseModel, root_validator, validator
-from pydantic.generics import GenericModel
+from typing_extensions import Annotated
+from pydantic import BaseModel, model_validator
+from pydantic.functional_validators import BeforeValidator
 from zarr.storage import init_group, BaseStore
 import numcodecs
 import zarr
@@ -30,65 +31,86 @@ ZarrVersion = Union[Literal[2], Literal[3]]
 ArrayOrder = Union[Literal["C"], Literal["F"]]
 
 
-class NodeSpecV2(StrictBase, GenericModel, Generic[TAttr]):
+def stringify_dtype(value: npt.DTypeLike):
     """
-    The base class for ArraySpec and GroupSpec. Generic with respect to the type of
-    attrs.
+    Convert a np.dtype object into a string
+
+    Paramters
+    ---------
+
+    value: DTypeLike
+        Some object that can be coerced to a numpy dtype
+
+    Returns
+    -------
+
+    A numpy dtype string representation of the input.
     """
+    return np.dtype(value).str
 
-    zarr_version: ZarrVersion = 2
+
+DtypeStr = Annotated[str, BeforeValidator(stringify_dtype)]
 
 
-class ArraySpec(NodeSpecV2, Generic[TAttr]):
+def dictify_codec(value: Union[dict[str, Any], Codec]) -> dict[str, Any]:
+    """
+    Ensure that a numcodecs `Codec` is converted to a dict. If the input is not an
+    insance of `numcodecs.abc.Codec`, then it is assumed to be a dict with string keys
+    and it is returned unaltered.
+
+    Paramters
+    ---------
+
+    value : Union[dict[str, Any], numcodecs.abc.Codec]
+        The value to be dictified if it is not already a dict.
+
+    Returns
+    -------
+
+    If the input was a `Codec`, then the result of calling `get_config()` on that
+    object is returned. This should be a dict with string keys. All other values pass
+    through unaltered.
+    """
+    if isinstance(value, Codec):
+        result = value.get_config()
+    else:
+        result = value
+    return result
+
+
+CodecDict = Annotated[dict[str, Any], BeforeValidator(dictify_codec)]
+
+
+class ArraySpec(StrictBase, Generic[TAttr]):
     """
     This pydantic model represents the structural properties of a zarr array.
     It does not represent the data contained in the array. It is generic with respect to
     the type of attrs.
     """
 
+    zarr_version: ZarrVersion = 2
     attributes: TAttr
     shape: tuple[int, ...]
     chunks: tuple[int, ...]
-    dtype: str
+    dtype: DtypeStr
     fill_value: Union[None, int, float] = 0
     order: ArrayOrder = "C"
-    filters: Optional[list[dict[str, Any]]] = None
+    filters: Optional[list[CodecDict]] = None
     dimension_separator: DimensionSeparator = "/"
-    compressor: Optional[dict[str, Any]] = None
+    compressor: Optional[CodecDict] = None
 
-    @validator("dtype", pre=True)
-    def stringify_dtype(cls, v):
+    @model_validator(mode="after")
+    def check_ndim(cls, value):
         """
-        Convert a np.dtype object into a string
+        Check that the length of shape and chunks matches.
         """
-        return np.dtype(v).str
-
-    @validator("compressor", pre=True)
-    def jsonify_compressor(cls, v):
-        if isinstance(v, Codec):
-            v = v.get_config()
-        return v
-
-    @validator("filters", pre=True)
-    def jsonify_filters(cls, v):
-        if v is not None:
-            try:
-                v = [element.get_config() for element in v]
-                return v
-            except AttributeError:
-                pass
-        return v
-
-    @root_validator
-    def check_ndim(cls, values):
-        if "shape" in values and "chunks" in values:
-            if (lshape := len(values["shape"])) != (lchunks := len(values["chunks"])):
-                msg = (
-                    f"Length of shape must match length of chunks. Got {lshape} "
-                    f"elements for shape and {lchunks} elements for chunks."
-                )
-                raise ValueError(msg)
-        return values
+        if (lshape := len(value.shape)) != (lchunks := len(value.chunks)):
+            msg = (
+                f"Length of shape must match length of chunks. Got {lshape} elements",
+                f"for shape and {lchunks} elements for chunks.",
+            )
+            raise ValueError(msg)
+        return value
 
     @classmethod
     def from_array(cls, array: npt.NDArray[Any], **kwargs):
@@ -136,7 +158,9 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
             shape=zarray.shape,
             chunks=zarray.chunks,
             dtype=str(zarray.dtype),
-            fill_value=zarray.fill_value,
+            # explicitly cast to numpy type and back to python
+            # so that int 0 isn't serialized as 0.0
+            fill_value=zarray.dtype.type(zarray.fill_value).tolist(),
             order=zarray.order,
             filters=zarray.filters,
             dimension_separator=zarray._dimension_separator,
@@ -168,7 +192,7 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
         A zarr array that is structurally identical to the ArraySpec.
         This operation will create metadata documents in the store.
         """
-        spec_dict = self.dict()
+        spec_dict = self.model_dump()
         attrs = spec_dict.pop("attributes")
         if self.compressor is not None:
             spec_dict["compressor"] = numcodecs.get_codec(spec_dict["compressor"])
@@ -181,7 +205,8 @@ class ArraySpec(NodeSpecV2, Generic[TAttr]):
         return result
 
 
-class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
+class GroupSpec(StrictBase, Generic[TAttr, TItem]):
+    zarr_version: ZarrVersion = 2
     attributes: TAttr
     members: dict[str, TItem] = {}
 
@@ -204,21 +229,24 @@ class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
         """
 
         result: GroupSpec[TAttr, TItem]
-        members = {}
-        for name, member in group.items():
-            if isinstance(member, zarr.Array):
-                _item = ArraySpec.from_zarr(member)
-            elif isinstance(member, zarr.Group):
-                _item = GroupSpec.from_zarr(member)
+        items = {}
+        for name, item in group.items():
+            if isinstance(item, zarr.Array):
+                # convert to dict before the final typed GroupSpec construction
+                _item = ArraySpec.from_zarr(item).model_dump()
+            elif isinstance(item, zarr.Group):
+                # convert to dict before the final typed GroupSpec construction
+                _item = GroupSpec.from_zarr(item).model_dump()
             else:
                 msg = (
-                    f"Unparseable object encountered: {type(member)}. Expected "
-                    "zarr.Array or zarr.Group."
+                    f"Unparseable object encountered: {type(item)}. Expected zarr.Array"
+                    " or zarr.Group."
                 )
-                raise ValueError(msg)
-            members[name] = _item
 
-        result = cls(attributes=group.attrs.asdict(), members=members)
+                raise ValueError(msg)
+            items[name] = _item
+
+        result = cls(attributes=group.attrs.asdict(), members=items)
         return result
 
     def to_zarr(self, store: BaseStore, path: str, overwrite: bool = False):
@@ -243,8 +271,8 @@ class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
         A zarr group that is structurally identical to the GroupSpec.
         This operation will create metadata documents in the store.
         """
-        spec_dict = self.dict()
-        # pop members because it's not a valid kwarg for init_group
+        spec_dict = self.model_dump()
+        # pop items because it's not a valid kwarg for init_group
         spec_dict.pop("members")
         # pop attrs because it's not a valid kwarg for init_group
         attrs = spec_dict.pop("attributes")
@@ -260,22 +288,22 @@ class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
 
 
 @overload
-def from_zarr(element: zarr.Array) -> ArraySpec:
+def from_zarr(element: zarr.Group) -> GroupSpec:
     ...
 
 
 @overload
-def from_zarr(element: zarr.Group) -> GroupSpec:
+def from_zarr(element: zarr.Array) -> ArraySpec:
     ...
 
 
 def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupSpec]:
     """
-    Recursively parse a Zarr group or Zarr array into an ArraySpec or GroupSpec.
+    Recursively parse a Zarr group or Zarr array into an untyped ArraySpec or GroupSpec.
 
     Parameters
     ---------
-    element : a zarr Array or zarr Group
+    element : Union[zarr.Array, zarr.Group]
 
     Returns
     -------
@@ -309,6 +337,26 @@ def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupS
         )
         raise ValueError(msg)
     return result
+
+
+@overload
+def to_zarr(
+    spec: ArraySpec,
+    store: BaseStore,
+    path: str,
+    overwrite: bool = False,
+) -> zarr.Array:
+    ...
+
+
+@overload
+def to_zarr(
+    spec: GroupSpec,
+    store: BaseStore,
+    path: str,
+    overwrite: bool = False,
+) -> zarr.Group:
+    ...
 
 
 def to_zarr(

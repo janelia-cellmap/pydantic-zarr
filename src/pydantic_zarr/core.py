@@ -1,6 +1,5 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class StrictBase(BaseModel):
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(frozen=True, extra="forbid")
