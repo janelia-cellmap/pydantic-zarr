@@ -5,7 +5,7 @@
 [Pydantic](https://docs.pydantic.dev/1.10/) models for [Zarr](https://zarr.readthedocs.io/en/stable/index.html).
 
 ## ⚠️ Disclaimer ⚠️
-This project is under a lot of flux -- I want to add [zarr version 3](https://zarr-specs.readthedocs.io/en/latest/v3/core/v3.0.html) support to this project, but the [reference python implementation](https://github.com/zarr-developers/zarr-python) doesn't support version 3 yet. Also, the key ideas in this repo may change in the process of being formalized over in [this specification](https://github.com/zarr-developers/zeps/pull/46) (currently just a draft). As the ecosystem evolves *will* be breaking things (and versioning the project accordingly), so be advised!
+This project is under a lot of flux -- I want to add [zarr version 3](https://zarr-specs.readthedocs.io/en/latest/v3/core/v3.0.html) support to this project, but the [reference python implementation](https://github.com/zarr-developers/zarr-python) doesn't support version 3 yet. Also, the key ideas in this repo may change in the process of being formalized over in [this specification](https://github.com/zarr-developers/zeps/pull/46) (currently just a draft). As the ecosystem evolves I *will* be breaking things (and versioning the project accordingly), so be advised!
 
 ## Installation
 
