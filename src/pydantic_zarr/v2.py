@@ -11,7 +11,7 @@ from typing import (
     overload,
 )
 from typing_extensions import Annotated
-from pydantic import BaseModel, model_validator
+from pydantic import model_validator
 from pydantic.functional_validators import BeforeValidator
 from zarr.storage import init_group, BaseStore
 import numcodecs
@@ -23,12 +23,8 @@ from numcodecs.abc import Codec
 
 from pydantic_zarr.core import StrictBase
 
-TAttr = TypeVar("TAttr", bound=Union[Mapping[str, Any], BaseModel])
+TAttr = TypeVar("TAttr", bound=Mapping[str, Any])
 TItem = TypeVar("TItem", bound=Union["GroupSpec", "ArraySpec"])
-
-DimensionSeparator = Union[Literal["."], Literal["/"]]
-ZarrVersion = Union[Literal[2], Literal[3]]
-ArrayOrder = Union[Literal["C"], Literal["F"]]
 
 
 def stringify_dtype(value: npt.DTypeLike):
@@ -81,36 +77,69 @@ def dictify_codec(value: Union[dict[str, Any], Codec]) -> dict[str, Any]:
 CodecDict = Annotated[dict[str, Any], BeforeValidator(dictify_codec)]
 
 
-class ArraySpec(StrictBase, Generic[TAttr]):
+class NodeSpecV2(StrictBase):
     """
-    This pydantic model represents the structural properties of a zarr array.
-    It does not represent the data contained in the array. It is generic with respect to
-    the type of attrs.
+    The base class for V2 ArraySpec and GroupSpec.
+
+    Attributes
+    ----------
+
+    zarr_format: Literal[2]
+        The Zarr version represented by this node. Must be 2.
     """
 
-    zarr_version: ZarrVersion = 2
+    zarr_version: Literal[2] = 2
+
+
+class ArraySpec(NodeSpecV2, Generic[TAttr]):
+    """
+    A model of a Zarr Version 2 Array.
+
+    Attributes
+    ----------
+
+    attributes: TAttr
+        User-defined metadata associated with this array.
+    shape: Sequence[int]
+        The shape of this array.
+    dtype: str
+        The data type of this array.
+    chunks: Sequence[int]
+        The chunk size for this array.
+    order: Union["C", "F"]
+        The memory order of this array. Must be either "C", which designates "C order",
+        or "F", which designates "F order".
+    fill_value: FillValue
+        The fill value for this array. The default is 0.
+    compressor: Optional[CodecDict]
+        A JSON-serializable representation of a compression codec, or None.
+    dimension_separator: Union[".", "/"]
+        The character used for separating chunk keys for this array. Must be either "/"
+        or ".". The default is "/".
+    """
+
     attributes: TAttr
     shape: tuple[int, ...]
     chunks: tuple[int, ...]
     dtype: DtypeStr
     fill_value: Union[None, int, float] = 0
-    order: ArrayOrder = "C"
+    order: Union[Literal["C"], Literal["F"]] = "C"
     filters: Optional[list[CodecDict]] = None
-    dimension_separator: DimensionSeparator = "/"
+    dimension_separator: Union[Literal["/"], Literal["."]] = "/"
     compressor: Optional[CodecDict] = None
 
     @model_validator(mode="after")
-    def check_ndim(cls, value):
+    def check_ndim(self):
         """
         Check that the length of shape and chunks matches.
         """
-        if (lshape := len(value.shape)) != (lchunks := len(value.chunks)):
+        if (lshape := len(self.shape)) != (lchunks := len(self.chunks)):
             msg = (
                 f"Length of shape must match length of chunks. Got {lshape} elements",
                 f"for shape and {lchunks} elements for chunks.",
             )
             raise ValueError(msg)
-        return value
+        return self
 
     @classmethod
     def from_array(cls, array: npt.NDArray[Any], **kwargs):
@@ -205,8 +234,20 @@ class ArraySpec(StrictBase, Generic[TAttr]):
         return result
 
 
-class GroupSpec(StrictBase, Generic[TAttr, TItem]):
-    zarr_version: ZarrVersion = 2
+class GroupSpec(NodeSpecV2, Generic[TAttr, TItem]):
+    """
+    A model of a Zarr Version 2 Group.
+
+    Attributes
+    ----------
+
+    attributes: TAttr
+        The user-defined attributes of this group.
+    members: dict[str, TItem]
+        The members of this group. `members` is a dict with string keys and values that
+        must inherit from either ArraySpec or GroupSpec.
+    """
+
     attributes: TAttr
     members: dict[str, TItem] = {}
 
@@ -387,7 +428,7 @@ def to_zarr(
 
     Returns
     -------
-    A zarr Group or Array that is structurally identical to the spec object.
+    A zarr Group or Array that is structurally equivalent to the spec object.
     This operation will create metadata documents in the store.
 
     """

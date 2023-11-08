@@ -14,20 +14,16 @@ from typing import (
     Union,
     overload,
 )
-from pydantic import BaseModel, Field, validator
 from zarr.storage import BaseStore
 import zarr
-import numpy as np
 import numpy.typing as npt
 
 from pydantic_zarr.core import StrictBase
+from pydantic_zarr.v2 import DtypeStr
 
-TAttr = TypeVar("TAttr", bound=Union[Dict[str, Any], BaseModel])
+TAttr = TypeVar("TAttr", bound=Dict[str, Any])
 TItem = TypeVar("TItem", bound=Union["GroupSpec", "ArraySpec"])
-TConfig = TypeVar("TConfig", bound=Union[Mapping[str, Any], BaseModel])
-DimensionSeparator = Union[Literal["."], Literal["/"]]
-ZarrVersion = Literal[3]
-ArrayOrder = Union[Literal["C"], Literal["F"]]
+
 NodeType = Union[Literal["group"], Literal["array"]]
 
 # todo: introduce a type that represents hexadecimal representations of floats
@@ -46,7 +42,7 @@ FillValue = Union[
 
 class NamedConfig(StrictBase):
     name: str
-    configuration: Optional[Union[Mapping[str, Any], BaseModel]]
+    configuration: Optional[Mapping[str, Any]]
 
 
 class RegularChunkingConfig(StrictBase):
@@ -55,52 +51,72 @@ class RegularChunkingConfig(StrictBase):
 
 class RegularChunking(NamedConfig):
     name: Literal["regular"] = "regular"
-    config: RegularChunkingConfig
+    configuration: RegularChunkingConfig
 
 
 class DefaultChunkKeyEncodingConfig(StrictBase):
-    separator: DimensionSeparator
+    separator: Union[Literal["."], Literal["/"]]
 
 
 class DefaultChunkKeyEncoding(NamedConfig):
     name: Literal["default"]
-    config: Optional[DefaultChunkKeyEncodingConfig]
+    configuration: Optional[DefaultChunkKeyEncodingConfig]
 
 
-class NodeSpecV3(StrictBase, Generic[TAttr]):
+class NodeSpecV3(StrictBase):
     """
-    The base class for ArraySpec and GroupSpec. Generic with respect to the type of its
-    attributes.
+    The base class for V3 ArraySpec and GroupSpec.
+
+    Attributes
+    ----------
+
+    zarr_format: Literal[3]
+        The Zarr version represented by this node. Must be 3.
     """
 
-    zarr_format: ZarrVersion = 3
-    node_type: NodeType
+    zarr_format: Literal[3] = 3
 
 
 class ArraySpec(NodeSpecV3, Generic[TAttr]):
     """
-    This pydantic model represents the structural properties of a zarr array.
-    It does not represent the data contained in the array. It is generic with respect to
-    the type of attributes.
+    A model of a Zarr Version 3 Array.
+
+    Attributes
+    ----------
+
+    node_type: Literal['array']
+        The node type. Must be the string 'array'.
+    attributes: TAttr
+        User-defined metadata associated with this array.
+    shape: Sequence[int]
+        The shape of this array.
+    data_type: str
+        The data type of this array.
+    chunk_grid: NamedConfig
+        A `NamedConfig` object defining the chunk shape of this array.
+    chunk_key_encoding: NamedConfig
+        A `NamedConfig` object defining the chunk_key_encoding for the array.
+    fill_value: FillValue
+        The fill value for this array.
+    codecs: Sequence[NamedConfig]
+        The sequence of codices for this array.
+    storage_transformers: Optional[Sequence[NamedConfig]]
+        An optional sequence of `NamedConfig` objects that define the storage
+        transformers for this array.
+    dimension_names: Optional[Sequence[str]]
+        An optional sequence of strings that gives names to each axis of the array.
     """
 
-    node_type: NodeType = Field(default="array", frozen=True)
+    node_type: Literal["array"] = "array"
     attributes: TAttr = {}
     shape: Sequence[int]
-    data_type: str
-    chunk_grid: NamedConfig
-    chunk_key_encoding: NamedConfig
+    data_type: DtypeStr
+    chunk_grid: NamedConfig  # todo: validate this against shape
+    chunk_key_encoding: NamedConfig  # todo: validate this against shape
     fill_value: FillValue  # todo: validate this against the data type
-    codecs: List[NamedConfig]
-    storage_transformers: Optional[List[NamedConfig]] = None
-    dimension_names: Optional[List[str]]  # todo: validate this against shape
-
-    @validator("data_type", pre=True)
-    def stringify_dtype(cls, v):
-        """
-        Convert a np.dtype object into a string
-        """
-        return np.dtype(v).str
+    codecs: Sequence[NamedConfig]
+    storage_transformers: Optional[Sequence[NamedConfig]] = None
+    dimension_names: Optional[Sequence[str]]  # todo: validate this against shape
 
     @classmethod
     def from_array(cls, array: npt.NDArray[Any], **kwargs):
@@ -120,10 +136,13 @@ class ArraySpec(NodeSpecV3, Generic[TAttr]):
         An instance of ArraySpec with properties derived from the provided array.
 
         """
+        default_chunks = RegularChunking(
+            configuration=RegularChunkingConfig(chunk_shape=list(array.shape))
+        )
         return cls(
             shape=array.shape,
-            dtype=str(array.dtype),
-            chunks=kwargs.pop("chunks", array.shape),
+            data_type=str(array.dtype),
+            chunk_grid=kwargs.pop("chunks", default_chunks),
             attributes=kwargs.pop("attributes", {}),
             **kwargs,
         )
@@ -171,7 +190,22 @@ class ArraySpec(NodeSpecV3, Generic[TAttr]):
 
 
 class GroupSpec(NodeSpecV3, Generic[TAttr, TItem]):
-    node_type: NodeType = Field(default="group", frozen=True)
+    """
+    A model of a Zarr Version 3 Group.
+
+    Attributes
+    ----------
+
+    node_type: Literal['group']
+        The type of this node. Must be the string "group".
+    attributes: TAttr
+        The user-defined attributes of this group.
+    members: dict[str, TItem]
+        The members of this group. `members` is a dict with string keys and values that
+        must inherit from either ArraySpec or GroupSpec.
+    """
+
+    node_type: Literal["group"] = "group"
     attributes: TAttr
     members: dict[str, TItem] = {}
 
@@ -245,6 +279,26 @@ def from_zarr(element: Union[zarr.Array, zarr.Group]) -> Union[ArraySpec, GroupS
     raise NotImplementedError
 
 
+@overload
+def to_zarr(
+    spec: ArraySpec,
+    store: BaseStore,
+    path: str,
+    overwrite: bool = False,
+) -> zarr.Array:
+    ...
+
+
+@overload
+def to_zarr(
+    spec: GroupSpec,
+    store: BaseStore,
+    path: str,
+    overwrite: bool = False,
+) -> zarr.Group:
+    ...
+
+
 def to_zarr(
     spec: Union[ArraySpec, GroupSpec],
     store: BaseStore,
@@ -270,7 +324,7 @@ def to_zarr(
 
     Returns
     -------
-    A zarr Group or Array that is structurally identical to the spec object.
+    A zarr Group or Array that is structurally equivalent to the spec object.
     This operation will create metadata documents in the store.
 
     """
