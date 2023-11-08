@@ -5,18 +5,15 @@ default_stages: [commit, push]
 default_language_version:
   python: python3
 repos:
-  - repo: https://github.com/psf/black
-    rev: 23.7.0
-    hooks:
-      - id: black
-        language_version: python3.9
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
     hooks:
       - id: check-yaml
-  - repo: https://github.com/charliermarsh/ruff-pre-commit
+  - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: "v0.0.277"
+    rev: v0.1.4
     hooks:
+      # Run the linter.
       - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+      # Run the formatter.
+      - id: ruff-format
