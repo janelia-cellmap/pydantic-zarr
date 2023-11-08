@@ -2,7 +2,6 @@ from pydantic_zarr.v3 import ArraySpec, GroupSpec, NamedConfig
 
 
 def test_serialize_deserialize():
-
     array_attributes = {"foo": 42, "bar": "apples", "baz": [1, 2, 3, 4]}
 
     group_attributes = {"group": True}

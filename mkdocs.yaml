@@ -28,7 +28,8 @@ theme:
 
 nav:
     - About: index.md
-    - Usage: usage.md
+    - Usage (Zarr V3): usage_zarr_v3.md
+    - Usage (Zarr V2): usage_zarr_v2.md
     - API: api/core.md
 
 plugins:

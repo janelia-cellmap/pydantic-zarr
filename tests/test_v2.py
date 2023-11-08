@@ -137,16 +137,18 @@ def test_serialize_deserialize_groupspec(
     dtype: str,
     dimension_separator: Literal[".", "/"],
     compressor: Any,
-    filters: tuple[str, ...],
+    filters: Optional[tuple[str, ...]],
 ):
-    _filters = filters
-    if _filters is not None:
+    _filters: Optional[list[Codec]]
+    if filters is not None:
         _filters = []
         for filter in filters:
             if filter == "delta":
                 _filters.append(numcodecs.Delta(dtype))
             if filter == "scale_offset":
                 _filters.append(numcodecs.FixedScaleOffset(0, 1.0, dtype=dtype))
+    else:
+        _filters = filters
 
     class RootAttrs(TypedDict):
         foo: int
