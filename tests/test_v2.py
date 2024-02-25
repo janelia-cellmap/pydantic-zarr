@@ -5,7 +5,14 @@ from zarr.errors import ContainsGroupError
 from typing import Any, Literal, Union, Optional
 import numcodecs
 from numcodecs.abc import Codec
-from pydantic_zarr.v2 import ArraySpec, GroupSpec, to_zarr, from_zarr
+from pydantic_zarr.v2 import (
+    ArraySpec,
+    GroupSpec,
+    flatten,
+    to_zarr,
+    from_zarr,
+    unflatten,
+)
 import numpy as np
 import numpy.typing as npt
 import sys
@@ -320,3 +327,93 @@ def test_from_array(shape, dtype):
     spec2 = ArraySpec.from_array(template, chunks=chunks, attributes=attrs)
     assert spec2.chunks == chunks
     assert spec2.attributes == attrs
+
+
+@pytest.mark.parametrize("data", ["/", "a/b/c"])
+def test_member_name(data: str):
+    with pytest.raises(ValidationError, match='Strings containing "/" are invalid.'):
+        GroupSpec(attributes={}, members={data: GroupSpec(attributes={}, members={})})
+
+
+@pytest.mark.parametrize(
+    ("data, expected"),
+    [
+        (
+            ArraySpec.from_array(np.arange(10)),
+            {"/": ArraySpec.from_array(np.arange(10))},
+        ),
+        (
+            GroupSpec(
+                attributes={"foo": 10},
+                members={
+                    "a": ArraySpec.from_array(np.arange(5), attributes={"foo": 100})
+                },
+            ),
+            {
+                "/": GroupSpec(attributes={"foo": 10}, members=None),
+                "/a": ArraySpec.from_array(np.arange(5), attributes={"foo": 100}),
+            },
+        ),
+        (
+            GroupSpec(
+                attributes={},
+                members={
+                    "a": GroupSpec(
+                        attributes={"foo": 10},
+                        members={
+                            "a": ArraySpec.from_array(
+                                np.arange(5), attributes={"foo": 100}
+                            )
+                        },
+                    ),
+                    "b": ArraySpec.from_array(np.arange(2), attributes={"foo": 3}),
+                },
+            ),
+            {
+                "/": GroupSpec(attributes={}, members=None),
+                "/a": GroupSpec(attributes={"foo": 10}, members=None),
+                "/a/a": ArraySpec.from_array(np.arange(5), attributes={"foo": 100}),
+                "/b": ArraySpec.from_array(np.arange(2), attributes={"foo": 3}),
+            },
+        ),
+    ],
+)
+def test_flatten_unflatten(data, expected) -> None:
+    flattened = flatten(data)
+    assert flattened == expected
+    assert unflatten(flattened) == data
+
+
+# todo: parametrize
+def test_array_like() -> None:
+    a = ArraySpec.from_array(np.arange(10))
+    assert a.like(a)
+
+    b = a.model_copy(update={"dtype": "uint8"})
+    assert not a.like(b)
+    assert a.like(b, exclude={"dtype"})
+    assert a.like(b, include={"shape"})
+
+    c = a.model_copy(update={"shape": (100, 100)})
+    assert not a.like(c)
+    assert a.like(c, exclude={"shape"})
+    assert a.like(c, include={"dtype"})
+
+
+# todo: parametrize
+def test_group_like() -> None:
+    tree = {
+        "/": GroupSpec(attributes={"path": "/"}, members=None),
+        "/a": GroupSpec(attributes={"path": "/a"}, members=None),
+        "/b": ArraySpec.from_array(np.arange(10), attributes={"path": "/b"}),
+        "/a/b": ArraySpec.from_array(np.arange(10), attributes={"path": "/a/b"}),
+    }
+    group = GroupSpec.from_flat(tree)
+    assert group.like(group)
+    assert not group.like(group.model_copy(update={"attributes": None}))
+    assert group.like(
+        group.model_copy(update={"attributes": None}), exclude={"attributes"}
+    )
+    assert group.like(
+        group.model_copy(update={"attributes": None}), include={"members"}
+    )
