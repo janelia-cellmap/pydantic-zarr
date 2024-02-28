@@ -11,8 +11,6 @@ python = "^3.9"
 zarr = "^2.14.2"
 pydantic = "^2.0.0"
 typing-extensions = {version = "^4.7.1", python = "<3.12"}
-click = "^8.1.7"
-rich = "^13.7.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
