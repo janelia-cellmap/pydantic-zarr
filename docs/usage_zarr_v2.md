@@ -100,6 +100,190 @@ print(ArraySpec.from_array(np.arange(10)).model_dump())
 }
 """
 ```
+### Flattening and unflattening Zarr hierarchies
+
+In the previous section we built a model of a Zarr hierarchy by defining `GroupSpec` and `ArraySpec`
+instances, then providing those objects as `members` to the constructor of another `GroupSpec`. In
+other words, with this approach we create "child nodes" and give those nodes to the "parent node",
+recursively.
+
+Constructing deeply nested hierarchies this way can be tedious. 
+For this reason, `pydantic-zarr` supports an alternative representation of the Zarr
+hierarchy in the form of a dictionary with `str` keys and `ArraySpec` / `GroupSpec` values, and
+methods to convert to / from these dictionaries.
+
+#### Making a `GroupSpec` object from a flat hierarchy
+
+This example demonstrates how to create a `GroupSpec` from a `dict` representation of a Zarr hierarchy.
+
+```python
+from pydantic_zarr.v2 import GroupSpec, ArraySpec
+# other than the key representing the root path "", 
+# the keys must be valid paths in the Zarr storage hierarchy
+# note that the `members` attribute is `None` for the `GroupSpec` instances in this `dict`.
+tree = {
+    "": GroupSpec(members=None, attributes={"root": True}), 
+    "/a": GroupSpec(members=None, attributes={"root": False}),
+    "/a/b": ArraySpec(shape=(10,10), dtype="uint8", chunks=(1,1))
+    }
+
+print(GroupSpec.from_flat(tree).model_dump())
+"""
+{
+    'zarr_version': 2,
+    'attributes': {'root': True},
+    'members': {
+        'a': {
+            'zarr_version': 2,
+            'attributes': {'root': False},
+            'members': {
+                'b': {
+                    'zarr_version': 2,
+                    'attributes': {},
+                    'shape': (10, 10),
+                    'chunks': (1, 1),
+                    'dtype': '|u1',
+                    'fill_value': 0,
+                    'order': 'C',
+                    'filters': None,
+                    'dimension_separator': '/',
+                    'compressor': None,
+                }
+            },
+        }
+    },
+}
+"""
+```
+
+#### flattening `GroupSpec` objects
+
+This is similar to the example above, except that we are working in reverse -- we are making the 
+flat `dict` from the `GroupSpec` object.
+
+```python
+from pydantic_zarr.v2 import GroupSpec, ArraySpec
+# other than the key representing the root path "", 
+# the keys must be valid paths in the Zarr storage hierarchy
+# note that the `members` attribute is `None` for the `GroupSpec` instances in this `dict`.
+
+a_b = ArraySpec(shape=(10,10), dtype="uint8", chunks=(1,1))
+a = GroupSpec(members={'b': a_b}, attributes={"root": False})
+root = GroupSpec(members={'a': a}, attributes={"root": True})
+
+print(root.to_flat())
+"""
+{
+    '': GroupSpec(zarr_version=2, attributes={'root': True}, members=None),
+    '/a': GroupSpec(zarr_version=2, attributes={'root': False}, members=None),
+    '/a/b': ArraySpec(
+        zarr_version=2,
+        attributes={},
+        shape=(10, 10),
+        chunks=(1, 1),
+        dtype='|u1',
+        fill_value=0,
+        order='C',
+        filters=None,
+        dimension_separator='/',
+        compressor=None,
+    ),
+}
+"""
+```
+
+#### Implicit groups
+`zarr-python` supports creating Zarr arrays or groups deep in the 
+hierarchy without explicitly creating the intermediate groups first. 
+`from_flat` models this behavior. For example, `{'/a/b/c': ArraySpec(...)}` implicitly defines the existence of a groups named `a` and `b` (which is contained in `a`). `from_flat` will create the expected `GroupSpec` object from such `dict` instances. 
+
+```python
+from pydantic_zarr.v2 import GroupSpec, ArraySpec
+tree = {'/a/b/c': ArraySpec(shape=(1,), dtype='uint8', chunks=(1,))}
+print(GroupSpec.from_flat(tree).model_dump())
+"""
+{
+    'zarr_version': 2,
+    'attributes': {},
+    'members': {
+        'a': {
+            'zarr_version': 2,
+            'attributes': {},
+            'members': {
+                'b': {
+                    'zarr_version': 2,
+                    'attributes': {},
+                    'members': {
+                        'c': {
+                            'zarr_version': 2,
+                            'attributes': {},
+                            'shape': (1,),
+                            'chunks': (1,),
+                            'dtype': '|u1',
+                            'fill_value': 0,
+                            'order': 'C',
+                            'filters': None,
+                            'dimension_separator': '/',
+                            'compressor': None,
+                        }
+                    },
+                }
+            },
+        }
+    },
+}
+"""
+```
+
+## Comparing `GroupSpec` and `ArraySpec` models
+
+`GroupSpec` and `ArraySpec` both have `like` methods that take another `GroupSpec` or `ArraySpec` as an argument and return `True` (the models are like each other) or `False` (the models are not like each other). 
+
+The `like` method works by converting both input models to `dict` via `pydantic.BaseModel.model_dump`, and comparing the `dict` representation of the models. This means that instances of two different subclasses of `GroupSpec`, which would not be considered equal according to the `==` operator, will be considered `like` if and only if they serialize to identical `dict` instances.
+
+The `like` method also takes keyword arguments `include` and `exclude`, which results in attributes being explicitly included or excluded from the model comparison. So it's possible to use `like` to check if two `ArraySpec` instances have the same `shape` and `dtype` by calling `array_a.like(array_b, include={'shape', 'dtype'})`. This is useful if you don't care about the compressor or filters and just want to ensure that you can safely write an in-memory array to a Zarr array.
+
+```python
+from pydantic_zarr.v2 import ArraySpec, GroupSpec
+import zarr
+arr_a = ArraySpec(shape=(1,), dtype='uint8', chunks=(1,))
+arr_b = ArraySpec(shape=(2,), dtype='uint8', chunks=(1,)) # array with different shape
+
+print(arr_a.like(arr_b)) # False, because of mismatched shape
+#> False
+
+print(arr_a.like(arr_b, exclude={'shape'})) # True, because we exclude shape.
+#> True
+
+# `ArraySpec.like` will convert a zarr.Array to ArraySpec
+store = zarr.MemoryStore()
+arr_a_stored = arr_a.to_zarr(store, path='arr_a') # this is a zarr.Array
+
+print(arr_a.like(arr_a_stored)) # arr_a is like the zarr.Array version of itself
+#> True
+
+print(arr_b.like(arr_a_stored)) # False, because of mismatched shape
+#> False
+
+print(arr_b.like(arr_a_stored, exclude={'shape'})) # True, because we exclude shape.
+#> True
+
+# the same thing thing for groups
+g_a = GroupSpec(attributes={'foo': 10}, members={'a': arr_a, 'b': arr_b})
+g_b = GroupSpec(attributes={'foo': 11}, members={'a': arr_a, 'b': arr_b})
+
+print(g_a.like(g_a)) # g_a is like itself
+#> True
+
+print(g_a.like(g_b)) # False, because of mismatched attributes
+#> False
+
+print(g_a.like(g_b, exclude={'attributes'})) # True, because we ignore attributes
+#> True
+
+print(g_a.like(g_a.to_zarr(store, path='g_a'))) # g_a is like its zarr.Group counterpart
+#> True
+```
 
 ## Using generic types
 

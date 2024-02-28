@@ -571,11 +571,47 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
         result = model_like(self, other_parsed, include=include, exclude=exclude)
         return result
 
+    def to_flat(self, root_path: str = ""):
+        """
+        Flatten this `GroupSpec`.
+        This method returns a `dict` with string keys and values that are `GroupSpec` or
+        `ArraySpec`.
+
+        Then the resulting `dict` will contain a copy of the input with a null `members` attribute
+        under the key `root_path`, as well as copies of the result of calling `node.to_flat` on each
+        element of `node.members`, each under a key created by joining `root_path` with a '/`
+        character to the name of each member, and so on recursively for each sub-member.
+
+        Parameters
+        ---------
+        root_path: `str`, default = ''.
+            The root path. The keys in `self.members` will be
+            made relative to `root_path` when used as keys in the result dictionary.
+
+        Returns
+        -------
+        Dict[str, ArraySpec | GroupSpec]
+            A flattened representation of the hierarchy.
+
+        Examples
+        --------
+
+        >>> from pydantic_zarr.v2 import to_flat, GroupSpec
+        >>> g1 = GroupSpec(members=None, attributes={'foo': 'bar'})
+        >>> to_flat(g1)
+        {'': GroupSpec(zarr_version=2, attributes={'foo': 'bar'}, members=None)}
+        >>> to_flat(g1 root_path='baz')
+        {'baz': GroupSpec(zarr_version=2, attributes={'foo': 'bar'}, members=None)}
+        >>> to_flat(GroupSpec(members={'g1': g1}, attributes={'foo': 'bar'}))
+        {'/g1': GroupSpec(zarr_version=2, attributes={'foo': 'bar'}, members=None), '': GroupSpec(zarr_version=2, attributes={'foo': 'bar'}, members=None)}
+        """
+        return to_flat(self, root_path=root_path)
+
     @classmethod
     def from_flat(cls, data: Dict[str, ArraySpec | GroupSpec]):
         """
         Create a `GroupSpec` from a flat hierarchy representation. The flattened hierarchy is a
-        `dict` with the following constraints. Keys must be valid paths; values must
+        `dict` with the following constraints: keys must be valid paths; values must
         be `ArraySpec` or `GroupSpec` instances.
 
         Parameters
@@ -601,8 +637,8 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
         >>> GroupSpec.from_flat(flat)
         GroupSpec(zarr_version=2, attributes={'foo': 10}, members={'a': ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=None, dimension_separator='/', compressor=None)})
         """
-        unflattened = unflatten_group(data)
-        return cls(**unflattened.model_dump())
+        from_flated = from_flat_group(data)
+        return cls(**from_flated.model_dump())
 
 
 @overload
@@ -714,12 +750,12 @@ def to_zarr(
     return result
 
 
-def flatten(
+def to_flat(
     node: ArraySpec | GroupSpec, root_path: str = ""
 ) -> Dict[str, ArraySpec | GroupSpec]:
     """
     Flatten a `GroupSpec` or `ArraySpec`.
-    Takes a `GroupSpec` or `ArraySpec` and a string, and returns a `dict` with string keys and
+    Converts a `GroupSpec` or `ArraySpec` and a string, into a `dict` with string keys and
     values that are `GroupSpec` or `ArraySpec`.
 
     If the input is an `ArraySpec`, then this function just returns the dict `{root_path: node}`.
@@ -735,8 +771,8 @@ def flatten(
     node: `GroupSpec` | `ArraySpec`
         The node to flatten.
     root_path: `str`, default = ''.
-        The root path. If the input is a `GroupSpec`, then the keys in `GroupSpec.members` will be
-        made relative to `path` when used as keys in the result dictionary.
+        The root path. If `node` is a `GroupSpec`, then the keys in `node.members` will be
+        made relative to `root_path` when used as keys in the result dictionary.
 
     Returns
     -------
@@ -748,11 +784,11 @@ def flatten(
 
     >>> from pydantic_zarr.v2 import flatten, GroupSpec
     >>> g1 = GroupSpec(members=None, attributes={'foo': 'bar'})
-    >>> flatten(g1)
+    >>> to_flat(g1)
     {'': GroupSpec(zarr_version=2, attributes={'foo': 'bar'}, members=None)}
-    >>> flatten(g1 root_path='baz')
+    >>> to_flat(g1 root_path='baz')
     {'baz': GroupSpec(zarr_version=2, attributes={'foo': 'bar'}, members=None)}
-    >>> flatten(GroupSpec(members={'g1': g1}, attributes={'foo': 'bar'}))
+    >>> to_flat(GroupSpec(members={'g1': g1}, attributes={'foo': 'bar'}))
     {'/g1': GroupSpec(zarr_version=2, attributes={'foo': 'bar'}, members=None), '': GroupSpec(zarr_version=2, attributes={'foo': 'bar'}, members=None)}
     """
     result = {}
@@ -763,16 +799,17 @@ def flatten(
         model_copy = node.model_copy(deep=True, update={"members": None})
         if node.members is not None:
             for name, value in node.members.items():
-                result.update(flatten(value, "/".join([root_path, name])))
+                result.update(to_flat(value, "/".join([root_path, name])))
 
     result[root_path] = model_copy
+    # sort by increasing key length
+    result_sorted_keys = dict(sorted(result.items(), key=lambda v: len(v[0])))
+    return result_sorted_keys
 
-    return result
 
-
-def unflatten(data: Dict[str, ArraySpec | GroupSpec]) -> ArraySpec | GroupSpec:
+def from_flat(data: Dict[str, ArraySpec | GroupSpec]) -> ArraySpec | GroupSpec:
     """
-    Wraps `unflatten_group`, handling the special case where a Zarr array is defined at the root of
+    Wraps `from_flat_group`, handling the special case where a Zarr array is defined at the root of
     a hierarchy and thus is not contained by a Zarr group.
 
     Parameters
@@ -789,13 +826,13 @@ def unflatten(data: Dict[str, ArraySpec | GroupSpec]) -> ArraySpec | GroupSpec:
 
     Examples
     --------
-    >>> from pydantic_zarr.v2 import unflatten, GroupSpec, ArraySpec
+    >>> from pydantic_zarr.v2 import from_flat, GroupSpec, ArraySpec
     >>> import numpy as np
     >>> tree = {'': ArraySpec.from_array(np.arange(10))}
-    >>> unflatten(tree) # special case of a Zarr array at the root of the hierarchy
+    >>> from_flat(tree) # special case of a Zarr array at the root of the hierarchy
     ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=None, dimension_separator='/', compressor=None)
     >>> tree = {'/foo': ArraySpec.from_array(np.arange(10))}
-    >>> unflatten(tree) # note that an implicit Group is created
+    >>> from_flat(tree) # note that an implicit Group is created
     GroupSpec(zarr_version=2, attributes={}, members={'foo': ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=None, dimension_separator='/', compressor=None)})
     """
 
@@ -811,10 +848,10 @@ def unflatten(data: Dict[str, ArraySpec | GroupSpec]) -> ArraySpec | GroupSpec:
     if tuple(data.keys()) == ("",) and isinstance(tuple(data.values())[0], ArraySpec):
         return tuple(data.values())[0]
     else:
-        return unflatten_group(data)
+        return from_flat_group(data)
 
 
-def unflatten_group(data: Dict[str, ArraySpec | GroupSpec]) -> GroupSpec:
+def from_flat_group(data: Dict[str, ArraySpec | GroupSpec]) -> GroupSpec:
     """
     Generate a `GroupSpec` from a flat representation of a hierarchy, i.e. a `dict` with
     string keys (paths) and `ArraySpec` / `GroupSpec` values (nodes).
@@ -831,10 +868,10 @@ def unflatten_group(data: Dict[str, ArraySpec | GroupSpec]) -> GroupSpec:
 
     Examples
     --------
-    >>> from pydantic_zarr.v2 import unflatten_group, GroupSpec, ArraySpec
+    >>> from pydantic_zarr.v2 import from_flat_group, GroupSpec, ArraySpec
     >>> import numpy as np
     >>> tree = {'/foo': ArraySpec.from_array(np.arange(10))}
-    >>> unflatten_group(tree) # note that an implicit Group is created
+    >>> from_flat_group(tree) # note that an implicit Group is created
     GroupSpec(zarr_version=2, attributes={}, members={'foo': ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=None, dimension_separator='/', compressor=None)})
     """
     root_name = ""
@@ -842,7 +879,7 @@ def unflatten_group(data: Dict[str, ArraySpec | GroupSpec]) -> GroupSpec:
     # arrays that will be members of the returned GroupSpec
     member_arrays: Dict[str, ArraySpec] = {}
     # groups, and their members, that will be members of the returned GroupSpec.
-    # this dict is populated by recursively applying `unflatten_group` function.
+    # this dict is populated by recursively applying `from_flat_group` function.
     member_groups: Dict[str, GroupSpec] = {}
     # this dict collects the arrayspecs and groupspecs that belong to one of the members of the
     # groupspecs we are constructing. They will later be aggregated in a recursive step that
@@ -888,7 +925,7 @@ def unflatten_group(data: Dict[str, ArraySpec | GroupSpec]) -> GroupSpec:
 
     # recurse
     for subparent_name, submemb in submember_by_parent_name.items():
-        member_groups[subparent_name] = unflatten_group(submemb)
+        member_groups[subparent_name] = from_flat_group(submemb)
 
     return GroupSpec(
         members={**member_groups, **member_arrays}, attributes=root_node.attributes

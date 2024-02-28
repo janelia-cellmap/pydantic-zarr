@@ -8,10 +8,10 @@ from numcodecs.abc import Codec
 from pydantic_zarr.v2 import (
     ArraySpec,
     GroupSpec,
-    flatten,
+    to_flat,
     to_zarr,
     from_zarr,
-    unflatten,
+    from_flat,
 )
 import numpy as np
 import numpy.typing as npt
@@ -419,9 +419,9 @@ def test_member_name(data: str):
     ],
 )
 def test_flatten_unflatten(data, expected) -> None:
-    flattened = flatten(data)
+    flattened = to_flat(data)
     assert flattened == expected
-    assert unflatten(flattened) == data
+    assert from_flat(flattened) == data
 
 
 # todo: parametrize
