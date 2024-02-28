@@ -30,14 +30,23 @@ nav:
     - About: index.md
     - Usage (Zarr V3): usage_zarr_v3.md
     - Usage (Zarr V2): usage_zarr_v2.md
-    - API: api/core.md
+    - API:
+      - core: api/core.md
+      - v2: api/v2.md
+      - v3: api/v3.md
 
 plugins:
 - mkdocstrings:
     handlers:
         python:
           options:
-            show_signature_annotations: true
+            docstring_style: numpy
+            members_order: source
+            separate_signature: true
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
 
 markdown_extensions:
   - pymdownx.highlight:

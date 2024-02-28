@@ -1,5 +1,13 @@
 from __future__ import annotations
-from typing import Any, Dict, Literal, Mapping, Set, TypeAlias, Union
+from typing import (
+    Any,
+    Dict,
+    Literal,
+    Mapping,
+    Set,
+    TypeAlias,
+    Union,
+)
 from pydantic import BaseModel, ConfigDict
 
 IncEx: TypeAlias = Union[Set[int], Set[str], Dict[int, Any], Dict[str, Any], None]

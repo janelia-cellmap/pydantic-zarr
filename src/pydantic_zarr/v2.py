@@ -8,6 +8,7 @@ from typing import (
     Mapping,
     TypeVar,
     Union,
+    cast,
     overload,
 )
 from typing_extensions import Annotated
@@ -34,18 +35,17 @@ TItem = TypeVar("TItem", bound=Union["GroupSpec", "ArraySpec"])
 
 def stringify_dtype(value: npt.DTypeLike):
     """
-    Convert a np.dtype object into a string
+    Convert a `numpy.dtype` object into a `str`.
 
-    Paramters
+    Parameters
     ---------
-
-    value: DTypeLike
+    value: `npt.DTypeLike`
         Some object that can be coerced to a numpy dtype
 
     Returns
     -------
 
-    A numpy dtype string representation of the input.
+    A numpy dtype string representation of `value`.
     """
     return np.dtype(value).str
 
@@ -53,35 +53,48 @@ def stringify_dtype(value: npt.DTypeLike):
 DtypeStr = Annotated[str, BeforeValidator(stringify_dtype)]
 
 
-def dictify_codec(value: Union[dict[str, Any], Codec]) -> dict[str, Any]:
+def dictify_codec(value: dict[str, Any] | Codec) -> dict[str, Any]:
     """
-    Ensure that a numcodecs `Codec` is converted to a dict. If the input is not an
-    insance of `numcodecs.abc.Codec`, then it is assumed to be a dict with string keys
+    Ensure that a `numcodecs.abc.Codec` is converted to a `dict`. If the input is not an
+    insance of `numcodecs.abc.Codec`, then it is assumed to be a `dict` with string keys
     and it is returned unaltered.
 
-    Paramters
+    Parameters
     ---------
 
-    value : Union[dict[str, Any], numcodecs.abc.Codec]
+    value : dict[str, Any] | numcodecs.abc.Codec
         The value to be dictified if it is not already a dict.
 
     Returns
     -------
-
-    If the input was a `Codec`, then the result of calling `get_config()` on that
-    object is returned. This should be a dict with string keys. All other values pass
-    through unaltered.
+    dict[str, Any]
+        If the input was a `Codec`, then the result of calling `get_config()` on that
+        object is returned. This should be a dict with string keys. All other values pass
+        through unaltered.
     """
     if isinstance(value, Codec):
-        result = value.get_config()
-    else:
-        result = value
-    return result
+        return value.get_config()
+    return value
 
 
 def parse_dimension_separator(data: Any) -> Literal["/", "."]:
+    """
+    Parse the dimension_separator metadata as per the Zarr version 2 specification.
+    If the input is `None`, this returns ".".
+    If the input is either "." or "/", this returns it.
+    Otherwise, raises a ValueError.
+
+    Parameters
+    ----------
+    data: Any
+        The input data to parse.
+
+    Returns
+    -------
+    Literal["/", "."]
+    """
     if data is None:
-        return "/"
+        return "."
     if data in ("/", "."):
         return data
     raise ValueError(f'Invalid data, expected one of ("/", ".", None), got {data}')
@@ -92,7 +105,7 @@ CodecDict = Annotated[dict[str, Any], BeforeValidator(dictify_codec)]
 
 class NodeSpec(StrictBase):
     """
-    The base class for V2 ArraySpec and GroupSpec.
+    The base class for V2 `ArraySpec` and `GroupSpec`.
 
     Attributes
     ----------
@@ -106,32 +119,38 @@ class NodeSpec(StrictBase):
 
 class ArraySpec(NodeSpec, Generic[TAttr]):
     """
-    A model of a Zarr Version 2 Array.
+    A model of a Zarr Version 2 Array. The specification for the data structure being modeled by
+    this class can be found in the
+    [Zarr specification](https://zarr.readthedocs.io/en/stable/spec/v2.html#arrays).
 
     Attributes
     ----------
-
-    attributes: TAttr
-        User-defined metadata associated with this array.
-    shape: Sequence[int]
+    attributes: TAttr, default = {}
+        User-defined metadata associated with this array. Should be JSON-serializable.
+    shape: tuple[int, ...]
         The shape of this array.
     dtype: str
         The data type of this array.
-    chunks: Sequence[int]
+    chunks: Tuple[int, ...]
         The chunk size for this array.
-    order: Union["C", "F"]
+    order: "C" | "F", default = "C"
         The memory order of this array. Must be either "C", which designates "C order",
-        or "F", which designates "F order".
-    fill_value: FillValue
+        AKA lexicographic ordering or "F", which designates "F order", AKA colexicographic ordering.
+        The default is "C".
+    fill_value: FillValue, default = 0
         The fill value for this array. The default is 0.
-    compressor: Optional[CodecDict]
-        A JSON-serializable representation of a compression codec, or None.
-    dimension_separator: Union[".", "/"]
-        The character used for separating chunk keys for this array. Must be either "/"
-        or ".". The default is "/".
+    compressor: CodecDict | None
+        A JSON-serializable representation of a compression codec, or None. The default is None.
+    filters: List[CodecDict] | None, default = None
+        A list of JSON-serializable representations of compression codec, or None.
+        The default is None.
+    dimension_separator: "." | "/", default = "/"
+        The character used for partitioning the different dimensions of a chunk key.
+        Must be either "/" or ".", or absent, in which case it is interpreted as ".".
+        The default is "/".
     """
 
-    attributes: TAttr
+    attributes: TAttr = cast(TAttr, {})
     shape: tuple[int, ...]
     chunks: tuple[int, ...]
     dtype: DtypeStr
@@ -146,7 +165,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
     @model_validator(mode="after")
     def check_ndim(self):
         """
-        Check that the length of shape and chunks matches.
+        Check that the `shape` and `chunks` and attributes have the same length.
         """
         if (lshape := len(self.shape)) != (lchunks := len(self.chunks)):
             msg = (
@@ -159,20 +178,31 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
     @classmethod
     def from_array(cls, array: npt.NDArray[Any], **kwargs):
         """
-        Create an ArraySpec from a numpy array-like object.
+        Create an `ArraySpec` from a numpy array-like object.
 
         Parameters
         ----------
-        array : object that conforms to the numpy array API.
-            The shape and dtype of this object will be used to construct an ArraySpec.
-            If the `chunks` keyword argument is not given, the shape of the array will
+        array : an array-like object.
+            Must have `shape` and `dtype` attributes.
+            The `shape` and `dtype` of this object will be used to construct an `ArraySpec`.
+            If the `chunks` keyword argument is not given, the `shape` of the array will
             be used for the chunks.
-
-        **kwargs : keyword arguments to the ArraySpec class constructor.
+        **kwargs
+            Keyword arguments passed to the `ArraySpec` constructor.
 
         Returns
         -------
-        An instance of ArraySpec with properties derived from the provided array.
+        ArraySpec
+            An instance of `ArraySpec` with `shape` and `dtype` attributes derived from `array`.
+
+        Examples
+        --------
+        >>> from pydantic_zarr.v2 import ArraySpec
+        >>> import numpy as np
+        >>> x = ArraySpec.from_array(np.arange(10))
+        >>> x
+        ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=None, dimension_separator='/', compressor=None)
+
 
         """
         return cls(
@@ -186,16 +216,24 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
     @classmethod
     def from_zarr(cls, zarray: zarr.Array):
         """
-        Create an ArraySpec from a zarr array.
+        Create an `ArraySpec` from an instance of `zarr.Array`.
 
         Parameters
         ----------
-        zarray : zarr array
+        zarray : zarr.Array
 
         Returns
         -------
-        An instance of ArraySpec with properties derived from the provided zarr
-        array.
+        ArraySpec
+            An instance of `ArraySpec` with properties derived from `array`.
+
+        Examples
+        --------
+        >>> import zarr
+        >>> from pydantic_zarr.v2 import ArraySpec
+        >>> x = zarr.create((10,10))
+        >>> ArraySpec.from_zarr(x)
+        ArraySpec(zarr_version=2, attributes={}, shape=(10, 10), chunks=(10, 10), dtype='<f8', fill_value=0.0, order='C', filters=None, dimension_separator='.', compressor={'id': 'blosc', 'cname': 'lz4', 'clevel': 5, 'shuffle': 1, 'blocksize': 0})
 
         """
         return cls(
@@ -219,25 +257,24 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         **kwargs,
     ) -> zarr.Array:
         """
-        Serialize an ArraySpec to a zarr array at a specific path in a zarr store.
+        Serialize an `ArraySpec` to a Zarr array at a specific path in a Zarr store. This operation
+        will create metadata documents in the store, but will not write any chunks.
 
         Parameters
         ----------
         store : instance of zarr.BaseStore
             The storage backend that will manifest the array.
-
         path : str
             The location of the array inside the store.
-
         overwrite : bool
             Whether to overwrite an existing array or group at the path. If overwrite is
-            False and an array or group already exists at the path, an exception will be
-            raised. Defaults to False.
+            `False` and an array or group already exists at `path`, an exception will be
+            raised. The default is `False`.
 
         Returns
         -------
-        A zarr array that is structurally identical to the ArraySpec.
-        This operation will create metadata documents in the store.
+        zarr.Array
+            A Zarr array that is structurally identical to `self`.
         """
         spec_dict = self.model_dump()
         attrs = spec_dict.pop("attributes")
@@ -254,34 +291,52 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
     def like(
         self,
         other: ArraySpec | zarr.Array,
+        *,
         include: IncEx = None,
         exclude: IncEx = None,
     ):
         """
-        Compare a GroupSpec to another GroupSpec or a Zarr group, parameterized over the fields
-        to exclude or include in the comparison. Models are first converted to dict via the
-        `model_dump` method of pydantic.BaseModel, then compared with the `==` operator.
+        Compare am `ArraySpec` to another `ArraySpec` or a `zarr.Array`, parameterized over the
+        fields to exclude or include in the comparison. Models are first converted to `dict` via the
+        `model_dump` method of `pydantic.BaseModel`, then compared with the `==` operator.
 
         Parameters
         ----------
-
         other: ArraySpec | zarr.Array
-            The array (model or actual) to compare with. If other is a zarr.Array, it will be
-            converted to ArraySpec first.
-        include: IncEx
-            A specification of fields to include in the comparison. Default value is `None`,
+            The array (model or actual) to compare with. If other is a `zarr.Array`, it will be
+            converted to `ArraySpec` first.
+        include: IncEx, default = None
+            A specification of fields to include in the comparison. The default value is `None`,
             which means that all fields will be included. See the documentation of
             `pydantic.BaseModel.model_dump` for more details.
-        exclude: IncEx
-            A specification of fields to exclude from the comparison. Default value is `None`,
+        exclude: IncEx, default = None
+            A specification of fields to exclude from the comparison. The default value is `None`,
             which means that no fields will be excluded. See the documentation of
             `pydantic.BaseModel.model_dump` for more details.
 
         Returns
         -------
-
         bool
-            `True` if the two models have identical fields, `False` otherwise.
+            `True` if the two models have identical fields, `False` otherwise, given
+            the set of fields specified by the `include` and `exclude` keyword arguments.
+
+        Examples
+        --------
+        >>> import zarr
+        >>> from pydantic_zarr.v2 import ArraySpec
+        >>> x = zarr.create((10,10))
+        >>> x.attrs.put({'foo': 10})
+        >>> x_model = ArraySpec.from_zarr(x)
+        >>> print(x_model.like(x_model)) # it is like itself.
+        True
+        >>> print(x_model.like(x))
+        True
+        >>> y = zarr.create((10,10))
+        >>> y.attrs.put({'foo': 11}) # x and y are the same, other than their attrs
+        >>> print(x_model.like(y))
+        False
+        >>> print(x_model.like(y, exclude={'attributes'}))
+        True
         """
 
         other_parsed: ArraySpec
@@ -297,32 +352,45 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
 class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
     """
     A model of a Zarr Version 2 Group.
+    The specification for the data structure being modeled by this
+    class can be found in the
+    [Zarr specification](https://zarr.readthedocs.io/en/stable/spec/v2.html#groups).
 
     Attributes
     ----------
 
-    attributes: TAttr
-        The user-defined attributes of this group.
-    members: dict[str, TItem] | None
-        The members of this group. `members` is a dict with string keys and values that
-        must inherit from either ArraySpec or GroupSpec.
+    attributes: TAttr, default = {}
+        The user-defined attributes of this group. Should be JSON-serializable.
+    members: dict[str, TItem] | None, default = {}
+        The members of this group. `members` may be `None`, which models the condition
+        where the members are unknown, e.g., because they have not been discovered yet.
+        If `members` is not s`None`, then it must be a dict with string keys and values that
+        are either `ArraySpec` or `GroupSpec`.
     """
 
-    attributes: TAttr
+    attributes: TAttr = cast(TAttr, {})
     members: Annotated[dict[str, TItem] | None, AfterValidator(ensure_key_no_path)] = {}
 
     @classmethod
-    def from_zarr(cls, group: zarr.Group, depth: int = -1) -> "GroupSpec[TAttr, TItem]":
+    def from_zarr(
+        cls, group: zarr.Group, *, depth: int = -1
+    ) -> "GroupSpec[TAttr, TItem]":
         """
-        Create a GroupSpec from a Zarr group. Subgroups and arrays contained in the Zarr
-        group will be converted to instances of GroupSpec and ArraySpec, respectively,
-        and these spec instances will be stored in the .items attribute of the parent
-        GroupSpec.
+        Create a GroupSpec from an instance of `zarr.Group`. Subgroups and arrays contained in the
+        Zarr group will be converted to instances of `GroupSpec` and `ArraySpec`, respectively,
+        and these spec instances will be stored in the `members` attribute of the parent
+        `GroupSpec`.
+
+        This is a recursive function, and the depth of recursion can be controlled by the `depth`
+        keyword argument. The default value for `depth` is -1, which directs this function to
+        traverse the entirety of a `zarr.Group`. This may be slow for large hierarchies, in which
+        case setting `depth` to a positive integer can limit how deep into the hierarchy the
+        recursion goes.
 
         Parameters
         ----------
-        group : Zarr group
-
+        group : zarr.Group
+            The Zarr group to model.
         depth: int
             An integer which may be no lower than -1. Determines how far into the tree to parse.
 
@@ -365,16 +433,14 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
 
     def to_zarr(self, store: BaseStore, path: str, **kwargs):
         """
-        Serialize a GroupSpec to a zarr group at a specific path in a zarr store.
-
+        Serialize this `GroupSpec` to a Zarr group at a specific path in a `zarr.BaseStore`.
+        This operation will create metadata documents in the store.
         Parameters
         ----------
-        store : instance of zarr.BaseStore
+        store : zarr.BaseStore
             The storage backend that will manifest the group and its contents.
-
         path : str
             The location of the group inside the store.
-
         overwrite : bool
             Whether to overwrite an existing array or group at the path. If overwrite is
             False and an array or group already exists at the path, an exception will be
@@ -382,8 +448,9 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
 
         Returns
         -------
-        A zarr group that is structurally identical to the GroupSpec.
-        This operation will create metadata documents in the store.
+        zarr.Group
+            A zarr group that is structurally identical to the GroupSpec.
+
         """
         spec_dict = self.model_dump(exclude={"members": True})
         attrs = spec_dict.pop("attributes")
@@ -395,8 +462,8 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
                     "Call to_zarr with overwrite=True to delete the existing group."
                 )
                 raise ContainsGroupError(msg)
-            else:
-                init_group(store=store, overwrite=kwargs["overwrite"], path=path)
+        else:
+            init_group(store=store, overwrite=kwargs.get("overwrite", False), path=path)
 
         result = zarr.group(store=store, path=path, **kwargs)
         result.attrs.put(attrs)
@@ -414,30 +481,50 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
         exclude: IncEx = None,
     ):
         """
-        Compare a GroupSpec to another GroupSpec or a Zarr group, parameterized over the fields
-        to exclude or include in the comparison. Models are first converted to dict via the
-        `model_dump` method of pydantic.BaseModel, then compared with the `==` operator.
+        Compare a `GroupSpec` to another `GroupSpec` or a `zarr.Group`, parameterized over the
+        fields to exclude or include in the comparison. Models are first converted to dict via the
+        `model_dump` method of `pydantic.BaseModel`, then compared with the `==` operator.
 
         Parameters
         ----------
-
         other: GroupSpec | zarr.Group
-            The group (model or actual) to compare with. If other is a zarr.Group, it will be
-            converted to GroupSpec first.
-        include: IncEx
-            A specification of fields to include in the comparison. Default value is `None`,
+            The group (model or actual) to compare with. If other is a `zarr.Group`, it will be
+            converted to a `GroupSpec`.
+        include: IncEx, default = None
+            A specification of fields to include in the comparison. The default is `None`,
             which means that all fields will be included. See the documentation of
             `pydantic.BaseModel.model_dump` for more details.
-        exclude: IncEx
-            A specification of fields to exclude from the comparison. Default value is `None`,
+        exclude: IncEx, default = None
+            A specification of fields to exclude from the comparison. The default is `None`,
             which means that no fields will be excluded. See the documentation of
             `pydantic.BaseModel.model_dump` for more details.
 
         Returns
         -------
-
         bool
             `True` if the two models have identical fields, `False` otherwise.
+
+        Examples
+        --------
+        >>> import zarr
+        >>> from pydantic_zarr.v2 import GroupSpec
+        >>> import numpy as np
+        >>> z1 = zarr.group(path='z1')
+        >>> z1a = z1.array(name='foo', data=np.arange(10))
+        >>> z1_model = GroupSpec.from_zarr(z1)
+        >>> print(z1_model.like(z1_model)) # it is like itself
+        True
+        >>> print(z1_model.like(z1))
+        True
+        >>> z2 = zarr.group(path='z2')
+        >>> z2a = z2.array(name='foo', data=np.arange(10))
+        >>> print(z1_model.like(z2))
+        True
+        >>> z2.attrs.put({'foo' : 100}) # now they have different attributes
+        >>> print(z1_model.like(z2))
+        False
+        >>> print(z1_model.like(z2, exclude={'attributes'}))
+        True
         """
 
         other_parsed: GroupSpec
@@ -452,8 +539,32 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
     @classmethod
     def from_flat(cls, data: Dict[str, ArraySpec | GroupSpec]):
         """
-        Create a GroupSpec from a "flat" representation
-        (a dict mapping string paths to ArraySpec or GroupSpec instances)
+        Create a `GroupSpec` from a flat hierarchy representation. The flattened hierarchy is a
+        `dict` with the following constraints. Keys must be valid paths; values must
+        be `ArraySpec` or `GroupSpec` instances.
+
+        Parameters
+        ----------
+        data: Dict[str, ArraySpec | GroupSpec]
+            A flattened representation of a Zarr hierarchy.
+
+        Returns
+        -------
+        GroupSpec
+            A `GroupSpec` representation of the hierarchy.
+
+        Examples
+        --------
+        >>> from pydantic_zarr.v2 import GroupSpec, ArraySpec
+        >>> import numpy as np
+        >>> flat = {'': GroupSpec(attributes={'foo': 10}, members=None)}
+        >>> GroupSpec.from_flat(flat)
+        GroupSpec(zarr_version=2, attributes={'foo': 10}, members={})
+        >>> flat = {
+            '': GroupSpec(attributes={'foo': 10}, members=None),
+            '/a': ArraySpec.from_array(np.arange(10))}
+        >>> GroupSpec.from_flat(flat)
+        GroupSpec(zarr_version=2, attributes={'foo': 10}, members={'a': ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=None, dimension_separator='/', compressor=None)})
         """
         unflattened = unflatten_group(data)
         return cls(**unflattened.model_dump())
@@ -473,16 +584,22 @@ def from_zarr(
     element: zarr.Array | zarr.Group, depth: int = -1
 ) -> ArraySpec | GroupSpec:
     """
-    Recursively parse a Zarr group or Zarr array into an untyped ArraySpec or GroupSpec.
+    Recursively parse a `zarr.Group` or `zarr.Array` into an `ArraySpec` or `GroupSpec`.
 
     Parameters
-    ---------
-    element : Union[zarr.Array, zarr.Group]
+    ----------
+    element : zarr.Array | zarr.Group
+        The `zarr.Array` or `zarr.Group` to model.
+    depth: int, default = -1
+        An integer which may be no lower than -1. If `element` is a `zarr.Group`, the `depth`
+        parameter determines how deeply the hierarchy defined by `element` will be parsed.
+        This argument has no effect if `element` is a `zarr.Array`.
 
     Returns
     -------
-    An instance of GroupSpec or ArraySpec that represents the
-    structure of the zarr group or array.
+    ArraySpec | GroupSpec
+        An instance of `GroupSpec` or `ArraySpec` that models the structure of the input Zarr group
+        or array.
     """
 
     if isinstance(element, zarr.Array):
@@ -525,29 +642,27 @@ def to_zarr(
     **kwargs,
 ) -> zarr.Array | zarr.Group:
     """
-    Serialize a GroupSpec or ArraySpec to a zarr group or array at a specific path in
-    a zarr store.
+    Serialize a `GroupSpec` or `ArraySpec` to a Zarr group or array at a specific path in
+    a Zarr store.
 
     Parameters
     ----------
-    spec : GroupSpec or ArraySpec
-        The GroupSpec or ArraySpec that will be serialized to storage.
-
-    store : instance of zarr.BaseStore
-        The storage backend that will manifest the group or array.
-
+    spec : ArraySpec | GroupSpec
+        The `GroupSpec` or `ArraySpec` that will be serialized to storage.
+    store : zarr.BaseStore
+        The storage backend that will manifest the Zarr group or array modeled by `spec`.
     path : str
-        The location of the group or array inside the store.
-
+        The location of the Zarr group or array inside the store.
     overwrite : bool
-       Whether to overwrite an existing array or group at the path. If overwrite is
-        False and an array or group already exists at the path, an exception will be
-        raised. Defaults to False.
+        Whether to overwrite an existing array or group at the path. If overwrite is
+        `False` and a Zarr array or group already exists at `path`, an exception will be
+        raised. Defaults to `False`.
 
     Returns
     -------
-    A zarr Group or Array that is structurally equivalent to the spec object.
-    This operation will create metadata documents in the store.
+    zarr.Array | zarr.Group
+        A `zarr.Group` or `zarr.Array` that is structurally equivalent to `spec`.
+        This operation will create metadata documents in the store.
 
     """
     if isinstance(spec, ArraySpec):
@@ -556,8 +671,8 @@ def to_zarr(
         result = spec.to_zarr(store, path, **kwargs)
     else:
         msg = (
-            "Invalid argument for spec. Expected an instance of GroupSpec or ",
-            f"ArraySpec, got {type(spec)} instead.",
+            "Invalid argument for spec. Expected an instance of `GroupSpec` or ",
+            f"`ArraySpec`, got {type(spec)} instead.",
         )
         raise ValueError(msg)
 
@@ -565,81 +680,145 @@ def to_zarr(
 
 
 def flatten(
-    node: ArraySpec | GroupSpec, path: str = "/"
+    node: ArraySpec | GroupSpec, root_path: str = ""
 ) -> Dict[str, ArraySpec | GroupSpec]:
     """
     Flatten a `GroupSpec` or `ArraySpec`.
-    Takes a `GroupSpec` or `ArraySpec` and a string, and returns dictionary with string keys and values that are
-    `GroupSpec` or `ArraySpec`. If the input is an `ArraySpec`, then this function just returns the dict `{path: node}`.
-    If the input is a `GroupSpec`, then the resulting dictionary will contain a copy of the input with an empty `members` attribute
-    under the key `path`, as well as copies of the result of calling `flatten_node` on each member of the input, each under a key created by joining `path` with a '/` character
-    to the name of each member.
+    Takes a `GroupSpec` or `ArraySpec` and a string, and returns a `dict` with string keys and
+    values that are `GroupSpec` or `ArraySpec`.
 
-    Paramters
+    If the input is an `ArraySpec`, then this function just returns the dict `{root_path: node}`.
+
+    If the input is a `GroupSpec`, then the resulting `dict` will contain a copy of the input
+    with a null `members` attribute under the key `root_path`, as well as copies of the result of
+    calling `flatten_node` on each element of `node.members`, each under a key created by joining
+    `root_path` with a '/` character to the name of each member, and so on recursively for each
+    sub-member.
+
+    Parameters
     ---------
     node: `GroupSpec` | `ArraySpec`
         The node to flatten.
-    path: `str`, default is 'root'
+    root_path: `str`, default = ''.
         The root path. If the input is a `GroupSpec`, then the keys in `GroupSpec.members` will be
         made relative to `path` when used as keys in the result dictionary.
 
     Returns
     -------
-    `Dict[str, GroupSpec | ArraySpec]`
+    Dict[str, ArraySpec | GroupSpec]
+        A flattened representation of the hierarchy.
 
+    Examples
+    --------
+
+    >>> from pydantic_zarr.v2 import flatten, GroupSpec
+    >>> g1 = GroupSpec(members=None, attributes={'foo': 'bar'})
+    >>> flatten(g1)
+    {'': GroupSpec(zarr_version=2, attributes={'foo': 'bar'}, members=None)}
+    >>> flatten(g1 root_path='baz')
+    {'baz': GroupSpec(zarr_version=2, attributes={'foo': 'bar'}, members=None)}
+    >>> flatten(GroupSpec(members={'g1': g1}, attributes={'foo': 'bar'}))
+    {'/g1': GroupSpec(zarr_version=2, attributes={'foo': 'bar'}, members=None), '': GroupSpec(zarr_version=2, attributes={'foo': 'bar'}, members=None)}
     """
     result = {}
-    model_copy: Union[ArraySpec, GroupSpec]
+    model_copy: ArraySpec | GroupSpec
     if isinstance(node, ArraySpec):
         model_copy = node.model_copy(deep=True)
     else:
         model_copy = node.model_copy(deep=True, update={"members": None})
         if node.members is not None:
             for name, value in node.members.items():
-                result.update(flatten(value, os.path.join(path, name)))
+                result.update(flatten(value, "/".join([root_path, name])))
 
-    result[path] = model_copy
+    result[root_path] = model_copy
 
     return result
 
 
-def unflatten(tree: Dict[str, ArraySpec | GroupSpec]) -> ArraySpec | GroupSpec:
+def unflatten(data: Dict[str, ArraySpec | GroupSpec]) -> ArraySpec | GroupSpec:
     """
-    Wraps unflatten_group, handling the special case where a zarr array is defined at the root of
-    a hierarchy and thus is not contained by a group.
+    Wraps `unflatten_group`, handling the special case where a Zarr array is defined at the root of
+    a hierarchy and thus is not contained by a Zarr group.
+
+    Parameters
+    ----------
+
+    data: Dict[str, ArraySpec | GroupSpec]
+        A flat representation of a Zarr hierarchy. This is a `dict` with keys that are strings,
+        and values that are either `GroupSpec` or `ArraySpec` instances.
+
+    Returns
+    -------
+    ArraySpec | GroupSpec
+        The `ArraySpec` or `GroupSpec` representation of the input data.
+
+    Examples
+    --------
+    >>> from pydantic_zarr.v2 import unflatten, GroupSpec, ArraySpec
+    >>> import numpy as np
+    >>> tree = {'': ArraySpec.from_array(np.arange(10))}
+    >>> unflatten(tree) # special case of a Zarr array at the root of the hierarchy
+    ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=None, dimension_separator='/', compressor=None)
+    >>> tree = {'/foo': ArraySpec.from_array(np.arange(10))}
+    >>> unflatten(tree) # note that an implicit Group is created
+    GroupSpec(zarr_version=2, attributes={}, members={'foo': ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=None, dimension_separator='/', compressor=None)})
     """
 
-    if (
-        len(tree.keys()) == 1
-        and tuple(tree.keys()) == ("/",)
-        and isinstance(tuple(tree.values())[0], ArraySpec)
-    ):
-        return tuple(tree.values())[0]
+    # minimal check that the keys are valid
+    invalid_keys = []
+    for key in data.keys():
+        if key.endswith("/"):
+            invalid_keys.append(key)
+    if len(invalid_keys) > 0:
+        msg = f'Invalid keys {invalid_keys} found in data. Keys may not end with the "/"" character'
+        raise ValueError(msg)
+
+    if tuple(data.keys()) == ("",) and isinstance(tuple(data.values())[0], ArraySpec):
+        return tuple(data.values())[0]
     else:
-        return unflatten_group(tree)
+        return unflatten_group(data)
 
 
 def unflatten_group(data: Dict[str, ArraySpec | GroupSpec]) -> GroupSpec:
     """
-    Generate a GroupSpec from a "flat" representation of a hierarchy, i.e. a dictionary with
-    string keys (paths) and ArraySpec / GroupSpec values (nodes).
+    Generate a `GroupSpec` from a flat representation of a hierarchy, i.e. a `dict` with
+    string keys (paths) and `ArraySpec` / `GroupSpec` values (nodes).
+
+    Parameters
+    ----------
+    data: Dict[str, ArraySpec | GroupSpec]
+        A flat representation of a Zarr hierarchy rooted at a Zarr group.
+
+    Returns
+    -------
+    GroupSpec
+        A `GroupSpec` that represents the hierarchy described by `data`.
+
+    Examples
+    --------
+    >>> from pydantic_zarr.v2 import unflatten_group, GroupSpec, ArraySpec
+    >>> import numpy as np
+    >>> tree = {'/foo': ArraySpec.from_array(np.arange(10))}
+    >>> unflatten_group(tree) # note that an implicit Group is created
+    GroupSpec(zarr_version=2, attributes={}, members={'foo': ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=None, dimension_separator='/', compressor=None)})
     """
     root_name = ""
     sep = "/"
     # arrays that will be members of the returned GroupSpec
     member_arrays: Dict[str, ArraySpec] = {}
     # groups, and their members, that will be members of the returned GroupSpec.
-    # this dict is constructed by recursively applying this function.
+    # this dict is populated by recursively applying `unflatten_group` function.
     member_groups: Dict[str, GroupSpec] = {}
-    # this dict collects the arrays and groups that belong to one of the members of the group
-    # we are constructing. They will later be aggregated in a recursive step that populates
-    # member_groups
+    # this dict collects the arrayspecs and groupspecs that belong to one of the members of the
+    # groupspecs we are constructing. They will later be aggregated in a recursive step that
+    # populates member_groups
     submember_by_parent_name: Dict[str, Dict[str, ArraySpec | GroupSpec]] = {}
-
+    # copy the input to ensure that mutations are contained inside this function
+    data_copy = data.copy()
     # Get the root node
     try:
-        # The root node is a GroupSpec with the key "/"
-        root_node = data.pop(root_name + sep)
+        # The root node is a GroupSpec with the key ""
+        root_node = data_copy.pop(root_name)
         if isinstance(root_node, ArraySpec):
             raise ValueError("Got an ArraySpec as the root node. This is invalid.")
     except KeyError:
@@ -647,13 +826,14 @@ def unflatten_group(data: Dict[str, ArraySpec | GroupSpec]) -> GroupSpec:
         root_node = GroupSpec(attributes={}, members=None)
 
     # partition the tree (sans root node) into 2 categories: (arrays, groups + their members).
-    for key, value in data.items():
+    for key, value in data_copy.items():
         key_parts = key.split(sep)
         if key_parts[0] != root_name:
-            raise ValueError(f'Invalid path: {key} does not start with "{sep}".')
+            raise ValueError(
+                f'Invalid path: {key} does not start with "{root_name}{sep}".'
+            )
 
         subparent_name = key_parts[1]
-
         if len(key_parts) == 2:
             # this is an array or group that belongs to the group we are ultimately returning
             if isinstance(value, ArraySpec):
@@ -661,7 +841,7 @@ def unflatten_group(data: Dict[str, ArraySpec | GroupSpec]) -> GroupSpec:
             else:
                 if subparent_name not in submember_by_parent_name:
                     submember_by_parent_name[subparent_name] = {}
-                submember_by_parent_name[subparent_name][sep] = value
+                submember_by_parent_name[subparent_name][root_name] = value
         else:
             # these are groups or arrays that belong to one of the member groups
             # not great that we repeat this conditional dict initialization

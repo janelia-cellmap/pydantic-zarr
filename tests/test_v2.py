@@ -295,6 +295,7 @@ def test_validation() -> None:
 
     GroupA.from_zarr(groupAMat)
     GroupB.from_zarr(groupBMat)
+
     ArrayA.from_zarr(groupAMat["a"])
     ArrayB.from_zarr(groupBMat["a"])
 
@@ -340,7 +341,7 @@ def test_member_name(data: str):
     [
         (
             ArraySpec.from_array(np.arange(10)),
-            {"/": ArraySpec.from_array(np.arange(10))},
+            {"": ArraySpec.from_array(np.arange(10))},
         ),
         (
             GroupSpec(
@@ -350,7 +351,7 @@ def test_member_name(data: str):
                 },
             ),
             {
-                "/": GroupSpec(attributes={"foo": 10}, members=None),
+                "": GroupSpec(attributes={"foo": 10}, members=None),
                 "/a": ArraySpec.from_array(np.arange(5), attributes={"foo": 100}),
             },
         ),
@@ -370,7 +371,7 @@ def test_member_name(data: str):
                 },
             ),
             {
-                "/": GroupSpec(attributes={}, members=None),
+                "": GroupSpec(attributes={}, members=None),
                 "/a": GroupSpec(attributes={"foo": 10}, members=None),
                 "/a/a": ArraySpec.from_array(np.arange(5), attributes={"foo": 100}),
                 "/b": ArraySpec.from_array(np.arange(2), attributes={"foo": 3}),
@@ -403,7 +404,7 @@ def test_array_like() -> None:
 # todo: parametrize
 def test_group_like() -> None:
     tree = {
-        "/": GroupSpec(attributes={"path": "/"}, members=None),
+        "": GroupSpec(attributes={"path": ""}, members=None),
         "/a": GroupSpec(attributes={"path": "/a"}, members=None),
         "/b": ArraySpec.from_array(np.arange(10), attributes={"path": "/b"}),
         "/a/b": ArraySpec.from_array(np.arange(10), attributes={"path": "/a/b"}),
@@ -417,3 +418,36 @@ def test_group_like() -> None:
     assert group.like(
         group.model_copy(update={"attributes": None}), include={"members"}
     )
+
+
+# todo: parametrize
+def test_from_zarr_depth():
+    tree = {
+        "": GroupSpec(members=None, attributes={"level": 0, "type": "group"}),
+        "/1": GroupSpec(members=None, attributes={"level": 1, "type": "group"}),
+        "/1/2": GroupSpec(members=None, attributes={"level": 2, "type": "group"}),
+        "/1/2/1": GroupSpec(members=None, attributes={"level": 3, "type": "group"}),
+        "/1/2/2": ArraySpec.from_array(
+            np.arange(20), attributes={"level": 3, "type": "array"}
+        ),
+    }
+
+    store = zarr.MemoryStore()
+    group_out = GroupSpec.from_flat(tree).to_zarr(store, path="test")
+    group_in_0 = GroupSpec.from_zarr(group_out, depth=0)
+    assert group_in_0 == tree[""]
+
+    group_in_1 = GroupSpec.from_zarr(group_out, depth=1)
+    assert group_in_1.attributes == tree[""].attributes
+    assert group_in_1.members["1"] == tree["/1"]
+
+    group_in_2 = GroupSpec.from_zarr(group_out, depth=2)
+    assert group_in_2.members["1"].members["2"] == tree["/1/2"]
+    assert group_in_2.attributes == tree[""].attributes
+    assert group_in_2.members["1"].attributes == tree["/1"].attributes
+
+    group_in_3 = GroupSpec.from_zarr(group_out, depth=3)
+    assert group_in_3.members["1"].members["2"].members["1"] == tree["/1/2/1"]
+    assert group_in_3.attributes == tree[""].attributes
+    assert group_in_3.members["1"].attributes == tree["/1"].attributes
+    assert group_in_3.members["1"].members["2"].attributes == tree["/1/2"].attributes

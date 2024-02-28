@@ -11,6 +11,7 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+    cast,
     overload,
 )
 from zarr.storage import BaseStore
@@ -107,7 +108,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
     """
 
     node_type: Literal["array"] = "array"
-    attributes: TAttr = {}
+    attributes: TAttr = cast(TAttr, {})
     shape: Sequence[int]
     data_type: DtypeStr
     chunk_grid: NamedConfig  # todo: validate this against shape
@@ -205,7 +206,7 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
     """
 
     node_type: Literal["group"] = "group"
-    attributes: TAttr = {}
+    attributes: TAttr = cast(TAttr, {})
     members: dict[str, TItem] = {}
 
     @classmethod
@@ -317,7 +318,7 @@ def to_zarr(
     path : str
         The location of the group or array inside the store.
     overwrite : bool
-       Whether to overwrite an existing array or group at the path. If overwrite is
+        Whether to overwrite an existing array or group at the path. If overwrite is
         False and an array or group already exists at the path, an exception will be
         raised. Defaults to False.
 
