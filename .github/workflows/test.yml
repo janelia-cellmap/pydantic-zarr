@@ -1,0 +1,24 @@
+name: Linux Testing
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install dependencies
+      shell: "bash -l {0}"
+      run: |
+        pip install poetry
+        poetry install
+    - name: Test
+      run: |
+        poetry run pytest
