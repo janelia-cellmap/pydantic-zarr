@@ -14,14 +14,14 @@ from typing import (
 from typing_extensions import Annotated
 from pydantic import AfterValidator, model_validator
 from pydantic.functional_validators import BeforeValidator
-from zarr.storage import init_group, BaseStore, contains_group
+from zarr.storage import init_group, BaseStore, contains_group, contains_array
 import numcodecs
 import zarr
 import os
 import numpy as np
 import numpy.typing as npt
 from numcodecs.abc import Codec
-from zarr.errors import ContainsGroupError
+from zarr.errors import ContainsGroupError, ContainsArrayError
 from pydantic_zarr.core import (
     IncEx,
     StrictBase,
@@ -266,11 +266,8 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
             The storage backend that will manifest the array.
         path : str
             The location of the array inside the store.
-        overwrite : bool
-            Whether to overwrite an existing array or group at the path. If overwrite is
-            `False` and an array or group already exists at `path`, an exception will be
-            raised. The default is `False`.
-
+        **kwargs : Any
+            Additional keyword arguments are passed to `zarr.create`.
         Returns
         -------
         zarr.Array
@@ -278,13 +275,36 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         """
         spec_dict = self.model_dump()
         attrs = spec_dict.pop("attributes")
+        overwrite = kwargs.pop("overwrite", False)
+        if kwargs.get("mode", "r").startswith("w"):
+            raise ValueError("Mode='w' is not supported yet")
         if self.compressor is not None:
             spec_dict["compressor"] = numcodecs.get_codec(spec_dict["compressor"])
         if self.filters is not None:
             spec_dict["filters"] = [
                 numcodecs.get_codec(f) for f in spec_dict["filters"]
             ]
-        result = zarr.create(store=store, path=path, **spec_dict, **kwargs)
+        if contains_array(store, path):
+            extant_array = zarr.open_array(store, path=path, mode="r")
+
+            if not self.like(extant_array):
+                if not overwrite:
+                    msg = (
+                        f"An array already exists at path {path}. "
+                        "That array is structurally dissimilar to the array you are trying to "
+                        "store. Call to_zarr with overwrite=True to overwrite that array."
+                    )
+                    raise ContainsArrayError(msg)
+            else:
+                if not overwrite:
+                    # extant_array is read-only, so we make a new array handle that
+                    # takes **kwargs
+                    return zarr.open_array(
+                        store=extant_array.store, path=extant_array.path, **kwargs
+                    )
+        result = zarr.create(
+            store=store, path=path, overwrite=overwrite, **spec_dict, **kwargs
+        )
         result.attrs.put(attrs)
         return result
 
@@ -441,36 +461,51 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
             The storage backend that will manifest the group and its contents.
         path : str
             The location of the group inside the store.
-        overwrite : bool
-            Whether to overwrite an existing array or group at the path. If overwrite is
-            False and an array or group already exists at the path, an exception will be
-            raised. Defaults to False.
+        **kwargs : Any
+            Additional keyword arguments that will be passed to `zarr.create` for creating
+            sub-arrays.
 
         Returns
         -------
         zarr.Group
-            A zarr group that is structurally identical to the GroupSpec.
+            A zarr group that is structurally identical to `self`.
 
         """
         spec_dict = self.model_dump(exclude={"members": True})
         attrs = spec_dict.pop("attributes")
-
+        overwrite = kwargs.pop("overwrite", False)
         if contains_group(store, path):
-            if not kwargs.get("overwrite", False):
-                msg = (
-                    f"A group already exists at path {path}. "
-                    "Call to_zarr with overwrite=True to delete the existing group."
-                )
-                raise ContainsGroupError(msg)
-        else:
-            init_group(store=store, overwrite=kwargs.get("overwrite", False), path=path)
+            extant_group = zarr.group(store, path=path)
+            if not self.like(extant_group):
+                if not overwrite:
+                    msg = (
+                        f"A group already exists at path {path}. "
+                        "That group is structurally dissimilar to the group you are trying to store."
+                        "Call to_zarr with overwrite=True to overwrite that group."
+                    )
+                    raise ContainsGroupError(msg)
+            else:
+                if not overwrite:
+                    # if the extant group is structurally identical to self, and overwrite is false,
+                    # then just return the extant group
+                    return extant_group
 
-        result = zarr.group(store=store, path=path, **kwargs)
+        elif contains_array(store, path) and not overwrite:
+            msg = (
+                f"An array already exists at path {path}. "
+                "Call to_zarr with overwrite=True to overwrite the array."
+            )
+            raise ContainsArrayError(msg)
+        else:
+            init_group(store=store, overwrite=overwrite, path=path)
+
+        result = zarr.group(store=store, path=path, overwrite=overwrite)
         result.attrs.put(attrs)
+        # consider raising an exception if a partial GroupSpec is provided
         if self.members is not None:
             for name, member in self.members.items():
                 subpath = os.path.join(path, name)
-                member.to_zarr(store, subpath, **kwargs)
+                member.to_zarr(store, subpath, overwrite=overwrite, **kwargs)
 
         return result
 

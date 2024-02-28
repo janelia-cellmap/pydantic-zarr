@@ -1,7 +1,7 @@
 from pydantic import ValidationError
 import pytest
 import zarr
-from zarr.errors import ContainsGroupError
+from zarr.errors import ContainsGroupError, ContainsArrayError
 from typing import Any, Literal, Union, Optional
 import numcodecs
 from numcodecs.abc import Codec
@@ -62,7 +62,8 @@ def test_array_spec(
         compressor=compressor,
         filters=_filters,
     )
-    array.attrs.put({"foo": [100, 200, 300], "bar": "hello"})
+    attributes = {"foo": [100, 200, 300], "bar": "hello"}
+    array.attrs.put(attributes)
     spec = ArraySpec.from_zarr(array)
 
     assert spec.zarr_version == array._version
@@ -107,6 +108,35 @@ def test_array_spec(
     assert spec.dimension_separator == array2._dimension_separator
     assert spec.shape == array2.shape
     assert spec.fill_value == array2.fill_value
+
+    # test serialization
+    store = zarr.MemoryStore()
+    stored = spec.to_zarr(store, path="foo")
+    assert ArraySpec.from_zarr(stored) == spec
+
+    # test that to_zarr is idempotent
+    assert spec.to_zarr(store, path="foo") == stored
+
+    # test that to_zarr raises if the extant array is different
+    spec_2 = spec.model_copy(update={"attributes": {"baz": 10}})
+    with pytest.raises(ContainsArrayError):
+        spec_2.to_zarr(store, path="foo")
+
+    # test that we can overwrite the dissimilar array
+    stored_2 = spec_2.to_zarr(store, path="foo", overwrite=True)
+    assert ArraySpec.from_zarr(stored_2) == spec_2
+
+    # test that mode and write_empty_chunks get passed through
+    assert spec_2.to_zarr(store, path="foo", mode="a").read_only is False
+    assert spec_2.to_zarr(store, path="foo", mode="r").read_only is True
+    assert (
+        spec_2.to_zarr(store, path="foo", write_empty_chunks=False)._write_empty_chunks
+        is False
+    )
+    assert (
+        spec_2.to_zarr(store, path="foo", write_empty_chunks=True)._write_empty_chunks
+        is True
+    )
 
 
 @pytest.mark.parametrize("array", (np.arange(10), np.zeros((10, 10), dtype="uint8")))
@@ -208,9 +238,18 @@ def test_serialize_deserialize_groupspec(
     observed = from_zarr(group)
     assert observed == spec
 
-    # check that we can't overwrite the original group
+    # assert that we get the same group twice
+    assert to_zarr(spec, store, "/group_a") == group
+
+    # check that we can't call to_zarr targeting the original group with a different spec
+    spec_2 = spec.model_copy(update={"attributes": RootAttrs(foo=99, bar=[0, 1, 2])})
     with pytest.raises(ContainsGroupError):
-        group = to_zarr(spec, store, "/group_a")
+        _ = to_zarr(spec_2, store, "/group_a")
+
+    # check that we can't call to_zarr with the original spec if the group has changed
+    group.attrs.put({"foo": 100})
+    with pytest.raises(ContainsGroupError):
+        _ = to_zarr(spec, store, "/group_a")
 
     # materialize again with overwrite
     group2 = to_zarr(spec, store, "/group_a", overwrite=True)
