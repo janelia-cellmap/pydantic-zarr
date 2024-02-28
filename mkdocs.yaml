@@ -5,7 +5,7 @@ site_description: >-
   Documentation for pydantic-zarr
 
 # Repository
-repo_name: d-v-b/pydantic-zarr
+repo_name: janelia-cellmap/pydantic-zarr
 repo_url: https://github.com/janelia-cellmap/pydantic-zarr
 
 # Copyright
