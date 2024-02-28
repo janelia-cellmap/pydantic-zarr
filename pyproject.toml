@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pydantic-zarr"
-version = "0.5.1"
+version = "0.5.2"
 description = "pydantic models for zarr"
 authors = ["Davis Vann Bennett <davis.v.bennett@gmail.com>"]
 readme = "README.md"
@@ -17,8 +17,6 @@ pytest = "^7.3.1"
 pytest-cov = "^4.1.0"
 mypy = "^1.3.0"
 pre-commit = "^3.3.3"
-black = "23.7.0"
-ruff = "0.0.277"
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.4.3"

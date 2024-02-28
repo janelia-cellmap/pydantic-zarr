@@ -1,11 +1,18 @@
 from pydantic import ValidationError
 import pytest
 import zarr
-from zarr.errors import ContainsGroupError
+from zarr.errors import ContainsGroupError, ContainsArrayError
 from typing import Any, Literal, Union, Optional
 import numcodecs
 from numcodecs.abc import Codec
-from pydantic_zarr.v2 import ArraySpec, GroupSpec, to_zarr, from_zarr
+from pydantic_zarr.v2 import (
+    ArraySpec,
+    GroupSpec,
+    to_flat,
+    to_zarr,
+    from_zarr,
+    from_flat,
+)
 import numpy as np
 import numpy.typing as npt
 import sys
@@ -55,7 +62,8 @@ def test_array_spec(
         compressor=compressor,
         filters=_filters,
     )
-    array.attrs.put({"foo": [100, 200, 300], "bar": "hello"})
+    attributes = {"foo": [100, 200, 300], "bar": "hello"}
+    array.attrs.put(attributes)
     spec = ArraySpec.from_zarr(array)
 
     assert spec.zarr_version == array._version
@@ -100,6 +108,35 @@ def test_array_spec(
     assert spec.dimension_separator == array2._dimension_separator
     assert spec.shape == array2.shape
     assert spec.fill_value == array2.fill_value
+
+    # test serialization
+    store = zarr.MemoryStore()
+    stored = spec.to_zarr(store, path="foo")
+    assert ArraySpec.from_zarr(stored) == spec
+
+    # test that to_zarr is idempotent
+    assert spec.to_zarr(store, path="foo") == stored
+
+    # test that to_zarr raises if the extant array is different
+    spec_2 = spec.model_copy(update={"attributes": {"baz": 10}})
+    with pytest.raises(ContainsArrayError):
+        spec_2.to_zarr(store, path="foo")
+
+    # test that we can overwrite the dissimilar array
+    stored_2 = spec_2.to_zarr(store, path="foo", overwrite=True)
+    assert ArraySpec.from_zarr(stored_2) == spec_2
+
+    # test that mode and write_empty_chunks get passed through
+    assert spec_2.to_zarr(store, path="foo", mode="a").read_only is False
+    assert spec_2.to_zarr(store, path="foo", mode="r").read_only is True
+    assert (
+        spec_2.to_zarr(store, path="foo", write_empty_chunks=False)._write_empty_chunks
+        is False
+    )
+    assert (
+        spec_2.to_zarr(store, path="foo", write_empty_chunks=True)._write_empty_chunks
+        is True
+    )
 
 
 @pytest.mark.parametrize("array", (np.arange(10), np.zeros((10, 10), dtype="uint8")))
@@ -201,9 +238,18 @@ def test_serialize_deserialize_groupspec(
     observed = from_zarr(group)
     assert observed == spec
 
-    # check that we can't overwrite the original group
+    # assert that we get the same group twice
+    assert to_zarr(spec, store, "/group_a") == group
+
+    # check that we can't call to_zarr targeting the original group with a different spec
+    spec_2 = spec.model_copy(update={"attributes": RootAttrs(foo=99, bar=[0, 1, 2])})
     with pytest.raises(ContainsGroupError):
-        group = to_zarr(spec, store, "/group_a")
+        _ = to_zarr(spec_2, store, "/group_a")
+
+    # check that we can't call to_zarr with the original spec if the group has changed
+    group.attrs.put({"foo": 100})
+    with pytest.raises(ContainsGroupError):
+        _ = to_zarr(spec, store, "/group_a")
 
     # materialize again with overwrite
     group2 = to_zarr(spec, store, "/group_a", overwrite=True)
@@ -288,6 +334,7 @@ def test_validation() -> None:
 
     GroupA.from_zarr(groupAMat)
     GroupB.from_zarr(groupBMat)
+
     ArrayA.from_zarr(groupAMat["a"])
     ArrayB.from_zarr(groupBMat["a"])
 
@@ -320,3 +367,126 @@ def test_from_array(shape, dtype):
     spec2 = ArraySpec.from_array(template, chunks=chunks, attributes=attrs)
     assert spec2.chunks == chunks
     assert spec2.attributes == attrs
+
+
+@pytest.mark.parametrize("data", ["/", "a/b/c"])
+def test_member_name(data: str):
+    with pytest.raises(ValidationError, match='Strings containing "/" are invalid.'):
+        GroupSpec(attributes={}, members={data: GroupSpec(attributes={}, members={})})
+
+
+@pytest.mark.parametrize(
+    ("data, expected"),
+    [
+        (
+            ArraySpec.from_array(np.arange(10)),
+            {"": ArraySpec.from_array(np.arange(10))},
+        ),
+        (
+            GroupSpec(
+                attributes={"foo": 10},
+                members={
+                    "a": ArraySpec.from_array(np.arange(5), attributes={"foo": 100})
+                },
+            ),
+            {
+                "": GroupSpec(attributes={"foo": 10}, members=None),
+                "/a": ArraySpec.from_array(np.arange(5), attributes={"foo": 100}),
+            },
+        ),
+        (
+            GroupSpec(
+                attributes={},
+                members={
+                    "a": GroupSpec(
+                        attributes={"foo": 10},
+                        members={
+                            "a": ArraySpec.from_array(
+                                np.arange(5), attributes={"foo": 100}
+                            )
+                        },
+                    ),
+                    "b": ArraySpec.from_array(np.arange(2), attributes={"foo": 3}),
+                },
+            ),
+            {
+                "": GroupSpec(attributes={}, members=None),
+                "/a": GroupSpec(attributes={"foo": 10}, members=None),
+                "/a/a": ArraySpec.from_array(np.arange(5), attributes={"foo": 100}),
+                "/b": ArraySpec.from_array(np.arange(2), attributes={"foo": 3}),
+            },
+        ),
+    ],
+)
+def test_flatten_unflatten(data, expected) -> None:
+    flattened = to_flat(data)
+    assert flattened == expected
+    assert from_flat(flattened) == data
+
+
+# todo: parametrize
+def test_array_like() -> None:
+    a = ArraySpec.from_array(np.arange(10))
+    assert a.like(a)
+
+    b = a.model_copy(update={"dtype": "uint8"})
+    assert not a.like(b)
+    assert a.like(b, exclude={"dtype"})
+    assert a.like(b, include={"shape"})
+
+    c = a.model_copy(update={"shape": (100, 100)})
+    assert not a.like(c)
+    assert a.like(c, exclude={"shape"})
+    assert a.like(c, include={"dtype"})
+
+
+# todo: parametrize
+def test_group_like() -> None:
+    tree = {
+        "": GroupSpec(attributes={"path": ""}, members=None),
+        "/a": GroupSpec(attributes={"path": "/a"}, members=None),
+        "/b": ArraySpec.from_array(np.arange(10), attributes={"path": "/b"}),
+        "/a/b": ArraySpec.from_array(np.arange(10), attributes={"path": "/a/b"}),
+    }
+    group = GroupSpec.from_flat(tree)
+    assert group.like(group)
+    assert not group.like(group.model_copy(update={"attributes": None}))
+    assert group.like(
+        group.model_copy(update={"attributes": None}), exclude={"attributes"}
+    )
+    assert group.like(
+        group.model_copy(update={"attributes": None}), include={"members"}
+    )
+
+
+# todo: parametrize
+def test_from_zarr_depth():
+    tree = {
+        "": GroupSpec(members=None, attributes={"level": 0, "type": "group"}),
+        "/1": GroupSpec(members=None, attributes={"level": 1, "type": "group"}),
+        "/1/2": GroupSpec(members=None, attributes={"level": 2, "type": "group"}),
+        "/1/2/1": GroupSpec(members=None, attributes={"level": 3, "type": "group"}),
+        "/1/2/2": ArraySpec.from_array(
+            np.arange(20), attributes={"level": 3, "type": "array"}
+        ),
+    }
+
+    store = zarr.MemoryStore()
+    group_out = GroupSpec.from_flat(tree).to_zarr(store, path="test")
+    group_in_0 = GroupSpec.from_zarr(group_out, depth=0)
+    assert group_in_0 == tree[""]
+
+    group_in_1 = GroupSpec.from_zarr(group_out, depth=1)
+    assert group_in_1.attributes == tree[""].attributes
+    assert group_in_1.members["1"] == tree["/1"]
+
+    group_in_2 = GroupSpec.from_zarr(group_out, depth=2)
+    assert group_in_2.members["1"].members["2"] == tree["/1/2"]
+    assert group_in_2.attributes == tree[""].attributes
+    assert group_in_2.members["1"].attributes == tree["/1"].attributes
+
+    group_in_3 = GroupSpec.from_zarr(group_out, depth=3)
+    assert group_in_3.members["1"].members["2"].members["1"] == tree["/1/2/1"]
+    assert group_in_3.attributes == tree[""].attributes
+    assert group_in_3.members["1"].attributes == tree["/1"].attributes
+    assert group_in_3.members["1"].members["2"].attributes == tree["/1/2"].attributes

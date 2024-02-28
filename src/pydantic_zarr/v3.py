@@ -7,11 +7,11 @@ from typing import (
     List,
     Literal,
     Mapping,
-    Optional,
     Sequence,
     Tuple,
     TypeVar,
     Union,
+    cast,
     overload,
 )
 from zarr.storage import BaseStore
@@ -42,7 +42,7 @@ FillValue = Union[
 
 class NamedConfig(StrictBase):
     name: str
-    configuration: Optional[Mapping[str, Any]]
+    configuration: Mapping[str, Any] | None
 
 
 class RegularChunkingConfig(StrictBase):
@@ -55,15 +55,15 @@ class RegularChunking(NamedConfig):
 
 
 class DefaultChunkKeyEncodingConfig(StrictBase):
-    separator: Union[Literal["."], Literal["/"]]
+    separator: Literal[".", "/"]
 
 
 class DefaultChunkKeyEncoding(NamedConfig):
     name: Literal["default"]
-    configuration: Optional[DefaultChunkKeyEncodingConfig]
+    configuration: DefaultChunkKeyEncodingConfig | None
 
 
-class NodeSpecV3(StrictBase):
+class NodeSpec(StrictBase):
     """
     The base class for V3 ArraySpec and GroupSpec.
 
@@ -77,7 +77,7 @@ class NodeSpecV3(StrictBase):
     zarr_format: Literal[3] = 3
 
 
-class ArraySpec(NodeSpecV3, Generic[TAttr]):
+class ArraySpec(NodeSpec, Generic[TAttr]):
     """
     A model of a Zarr Version 3 Array.
 
@@ -108,15 +108,15 @@ class ArraySpec(NodeSpecV3, Generic[TAttr]):
     """
 
     node_type: Literal["array"] = "array"
-    attributes: TAttr = {}
+    attributes: TAttr = cast(TAttr, {})
     shape: Sequence[int]
     data_type: DtypeStr
     chunk_grid: NamedConfig  # todo: validate this against shape
     chunk_key_encoding: NamedConfig  # todo: validate this against shape
     fill_value: FillValue  # todo: validate this against the data type
     codecs: Sequence[NamedConfig]
-    storage_transformers: Optional[Sequence[NamedConfig]] = None
-    dimension_names: Optional[Sequence[str]]  # todo: validate this against shape
+    storage_transformers: Sequence[NamedConfig] | None = None
+    dimension_names: Sequence[str] | None  # todo: validate this against shape
 
     @classmethod
     def from_array(cls, array: npt.NDArray[Any], **kwargs):
@@ -189,7 +189,7 @@ class ArraySpec(NodeSpecV3, Generic[TAttr]):
         raise NotImplementedError
 
 
-class GroupSpec(NodeSpecV3, Generic[TAttr, TItem]):
+class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
     """
     A model of a Zarr Version 3 Group.
 
@@ -206,11 +206,11 @@ class GroupSpec(NodeSpecV3, Generic[TAttr, TItem]):
     """
 
     node_type: Literal["group"] = "group"
-    attributes: TAttr
+    attributes: TAttr = cast(TAttr, {})
     members: dict[str, TItem] = {}
 
     @classmethod
-    def from_zarr(cls, group: zarr.Group) -> "GroupSpec[TAttr, TItem]":
+    def from_zarr(cls, group: zarr.Group) -> GroupSpec[TAttr, TItem]:
         """
         Create a GroupSpec from a zarr group. Subgroups and arrays contained in the zarr
         group will be converted to instances of GroupSpec and ArraySpec, respectively,
@@ -318,7 +318,7 @@ def to_zarr(
     path : str
         The location of the group or array inside the store.
     overwrite : bool
-       Whether to overwrite an existing array or group at the path. If overwrite is
+        Whether to overwrite an existing array or group at the path. If overwrite is
         False and an array or group already exists at the path, an exception will be
         raised. Defaults to False.
 
