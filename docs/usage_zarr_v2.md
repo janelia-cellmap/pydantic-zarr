@@ -78,7 +78,7 @@ print(dict(group2['bar'].attrs))
 
 ### Creating from an array
 
-The `ArraySpec` class has a `from_array` static method that takes a numpy-array-like object and returns an `ArraySpec` with `shape` and `dtype` fields matching those of the array-like object.
+The `ArraySpec` class has a `from_array` static method that takes an array-like object and returns an `ArraySpec` with `shape` and `dtype` fields matching those of the array-like object.
 
 ```python
 from pydantic_zarr.v2 import ArraySpec
