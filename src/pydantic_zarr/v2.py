@@ -35,7 +35,7 @@ TAttr = TypeVar("TAttr", bound=Mapping[str, Any])
 TItem = TypeVar("TItem", bound=Union["GroupSpec", "ArraySpec"])
 
 
-def stringify_dtype(value: npt.DTypeLike):
+def stringify_dtype(value: npt.DTypeLike) -> str:
     """
     Convert a `numpy.dtype` object into a `str`.
 
@@ -286,13 +286,13 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         )
 
     @classmethod
-    def from_zarr(cls, zarray: zarr.Array):
+    def from_zarr(cls, array: zarr.Array):
         """
         Create an `ArraySpec` from an instance of `zarr.Array`.
 
         Parameters
         ----------
-        zarray : zarr.Array
+        array : zarr.Array
 
         Returns
         -------
@@ -309,17 +309,17 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
 
         """
         return cls(
-            shape=zarray.shape,
-            chunks=zarray.chunks,
-            dtype=str(zarray.dtype),
+            shape=array.shape,
+            chunks=array.chunks,
+            dtype=str(array.dtype),
             # explicitly cast to numpy type and back to python
             # so that int 0 isn't serialized as 0.0
-            fill_value=zarray.dtype.type(zarray.fill_value).tolist(),
-            order=zarray.order,
-            filters=zarray.filters,
-            dimension_separator=zarray._dimension_separator,
-            compressor=zarray.compressor,
-            attributes=zarray.attrs.asdict(),
+            fill_value=array.dtype.type(array.fill_value).tolist(),
+            order=array.order,
+            filters=array.filters,
+            dimension_separator=array._dimension_separator,
+            compressor=array.compressor,
+            attributes=array.attrs.asdict(),
         )
 
     def to_zarr(
