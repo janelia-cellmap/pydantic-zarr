@@ -6,7 +6,7 @@ Static typing and runtime validation for Zarr hierachies.
 
 ## Overview
 
-`pydantic-zarr` expresses data stored in the [zarr](https://zarr.readthedocs.io/en/stable/) format with [Pydantic](https://docs.pydantic.dev/1.10/). Specifically, `pydantic-zarr` encodes Zarr groups and arrays as [Pydantic models](https://docs.pydantic.dev/1.10/usage/models/). These models are useful for formalizing the structure of Zarr hierarchies, type-checking Zarr hierarchies, and runtime validation for Zarr-based data.
+`pydantic-zarr` expresses data stored in the [Zarr](https://zarr.readthedocs.io/en/stable/) format with [Pydantic](https://docs.pydantic.dev/1.10/). Specifically, `pydantic-zarr` encodes Zarr groups and arrays as [Pydantic models](https://docs.pydantic.dev/1.10/usage/models/). These models are useful for formalizing the structure of Zarr hierarchies, type-checking Zarr hierarchies, and runtime validation for Zarr-based data.
 
 
 ```python
@@ -86,5 +86,5 @@ Zarr arrays are represented by the `ArraySpec` class, which has a similar `attri
 
 `GroupSpec` and `ArraySpec` are both [generic models](https://docs.pydantic.dev/1.10/usage/models/#generic-models). `GroupSpec` takes two type parameters, the first specializing the type of `GroupSpec.attributes`, and the second specializing the type of the *values* of `GroupSpec.members` (the keys of `GroupSpec.members` are always strings). `ArraySpec` only takes one type parameter, which specializes the type of `ArraySpec.attributes`.
 
-Examples using this generic typing functionality can be found in the [usage guide](usage.md#using-generic-types).
+Examples using this generic typing functionality can be found in the [usage guide](usage_zarr_v2.md#using-generic-types).
 
