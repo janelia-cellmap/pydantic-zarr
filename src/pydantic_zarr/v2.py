@@ -179,19 +179,22 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
 
     @classmethod
     def from_array(
-        cls, 
-        array: npt.NDArray[Any], 
+        cls,
+        array: npt.NDArray[Any],
         chunks: Literal["auto"] | tuple[int, ...] = "auto",
         attributes: Literal["auto"] | TAttr = "auto",
         fill_value: Literal["auto"] | int | float | None = "auto",
         order: Literal["auto", "C", "F"] = "auto",
         filters: list[CodecDict] | None = "auto",
-        dimension_separator: Annotated[Literal["/", "."], BeforeValidator(parse_dimension_separator)] = "auto",
-        compressor: CodecDict | None = "auto"):
+        dimension_separator: Annotated[
+            Literal["/", "."], BeforeValidator(parse_dimension_separator)
+        ] = "auto",
+        compressor: CodecDict | None = "auto",
+    ):
         """
-        Create an `ArraySpec` from an array-like object. This is a convenience method for when Zarr array will be modelled from an existing array. 
-        This method takes nearly the same arguments as the `ArraySpec` constructor, minus `shape` and `dtype`, which will be inferred from the `array` argument. 
-        Additionally, this method accepts the string "auto" as a parameter for all other `ArraySpec` attributes, in which case these attributes will be 
+        Create an `ArraySpec` from an array-like object. This is a convenience method for when Zarr array will be modelled from an existing array.
+        This method takes nearly the same arguments as the `ArraySpec` constructor, minus `shape` and `dtype`, which will be inferred from the `array` argument.
+        Additionally, this method accepts the string "auto" as a parameter for all other `ArraySpec` attributes, in which case these attributes will be
         inferred from the `array` argument, with a fallback value equal to the default `ArraySpec` parameters.
 
         Parameters
@@ -203,26 +206,26 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
             User-defined metadata associated with this array. Should be JSON-serializable. The default is "auto", which means that `array.attributes` will be used,
             with a fallback value of the empty dict `{}`.
         chunks: "auto" | tuple[int, ...], default = "auto"
-            The chunks for this `ArraySpec`. If `chunks` is "auto" (the default), then this method first checks if `array` has a `chunksize` attribute, using it if present. 
+            The chunks for this `ArraySpec`. If `chunks` is "auto" (the default), then this method first checks if `array` has a `chunksize` attribute, using it if present.
             This supports copying chunk sizes from dask arrays. If `array` does not have `chunksize`, then a routine from `zarr-python` is used to guess the chunk size,
             given the `shape` and `dtype` of `array`. If `chunks` is not auto, then it should be a tuple of ints.
         order: "auto" | "C" | "F", default = "auto"
-            The memory order of the `ArraySpec`. One of "auto", "C", or "F". The default is "auto", which means that, if present, `array.order` 
+            The memory order of the `ArraySpec`. One of "auto", "C", or "F". The default is "auto", which means that, if present, `array.order`
             will be used, falling back to "C" if `array` does not have an `order` attribute.
         fill_value: "auto" | int | float | None, default = "auto"
             The fill value for this array. Either "auto" or FillValue. The default is "auto", which means that `array.fill_value` will be used if that attribute exists, with a fallback value of 0.
         compressor: "auto" | CodecDict | None, default = "auto"
             The compressor for this `ArraySpec`. One of "auto", a JSON-serializable representation of a compression codec, or `None`. The default is "auto", which means that `array.compressor` attribute will be used, with a fallback value of `None`.
         filters: "auto" | List[CodecDict] | None, default = "auto"
-            The filters for this `ArraySpec`. One of "auto", a list of JSON-serializable representations of compression codec, or `None`. The default is "auto", which means that the `array.filters` attribute will be 
-            used, with a fallback value of `None`. 
+            The filters for this `ArraySpec`. One of "auto", a list of JSON-serializable representations of compression codec, or `None`. The default is "auto", which means that the `array.filters` attribute will be
+            used, with a fallback value of `None`.
         dimension_separator: "auto" | "." | "/", default = "auto"
             Sets the character used for partitioning the different dimensions of a chunk key.
             Must be one of "auto", "/" or ".". The default is "auto", which means that `array.dimension_separator` is used, with a fallback value of "/".
         Returns
         -------
         ArraySpec
-            An instance of `ArraySpec` with `shape` and `dtype` attributes derived from `array`. 
+            An instance of `ArraySpec` with `shape` and `dtype` attributes derived from `array`.
 
         Examples
         --------
@@ -242,46 +245,46 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         else:
             chunks_actual = chunks
 
-        if attributes == 'auto':
+        if attributes == "auto":
             attributes_actual = auto_attributes(array)
         else:
             attributes_actual = attributes
 
-        if fill_value == 'auto':
+        if fill_value == "auto":
             fill_value_actual = auto_fill_value(array)
         else:
             fill_value_actual = fill_value
 
-        if compressor == 'auto':
+        if compressor == "auto":
             compressor_actual = auto_compresser(array)
-        else: 
-            compressor_actual= compressor
+        else:
+            compressor_actual = compressor
 
-        if filters == 'auto':
+        if filters == "auto":
             filters_actual = auto_filters(array)
         else:
             filters_actual = filters
 
-        if order == 'auto':
+        if order == "auto":
             order_actual = auto_order(array)
         else:
-             order_actual = order
+            order_actual = order
 
-        if dimension_separator == 'auto':        
+        if dimension_separator == "auto":
             dimension_separator_actual = auto_dimension_separator(array)
         else:
             dimension_separator_actual = dimension_separator
-        
+
         return cls(
             shape=shape_actual,
             dtype=dtype_actual,
             chunks=chunks_actual,
             attributes=attributes_actual,
-            fill_value = fill_value_actual,
-            order = order_actual,
-            compressor = compressor_actual,
+            fill_value=fill_value_actual,
+            order=order_actual,
+            compressor=compressor_actual,
             filters=filters_actual,
-            dimension_separator=dimension_separator_actual
+            dimension_separator=dimension_separator_actual,
         )
 
     @classmethod
@@ -523,7 +526,9 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
         result = cls(attributes=attributes, members=members)
         return result
 
-    def to_zarr(self, store: BaseStore, path: str, *, overwrite: bool = False, **kwargs):
+    def to_zarr(
+        self, store: BaseStore, path: str, *, overwrite: bool = False, **kwargs
+    ):
         """
         Serialize this `GroupSpec` to a Zarr group at a specific path in a `zarr.BaseStore`.
         This operation will create metadata documents in the store.
@@ -800,7 +805,7 @@ def to_zarr(
     overwrite : bool, default = False
         Whether to overwrite existing objects in storage to create the Zarr group or array.
     **kwargs
-        Additional keyword arguments will be 
+        Additional keyword arguments will be
     Returns
     -------
     zarr.Array | zarr.Group
@@ -993,63 +998,70 @@ def from_flat_group(data: Dict[str, ArraySpec | GroupSpec]) -> GroupSpec:
         members={**member_groups, **member_arrays}, attributes=root_node.attributes
     )
 
-def auto_chunks(data: Any) -> tuple[int ,...]:
+
+def auto_chunks(data: Any) -> tuple[int, ...]:
     """
     Guess chunks from:
       input with a `chunksize` attribute, or
       input with a `chunks` attribute, or,
       input with `shape` and `dtype` attributes
     """
-    if hasattr(data, 'chunksize'):
+    if hasattr(data, "chunksize"):
         return data.chunksize
-    if hasattr(data, 'chunks'):
+    if hasattr(data, "chunks"):
         return data.chunks
     return guess_chunks(data.shape, np.dtype(data.dtype).itemsize)
+
 
 def auto_attributes(data: Any) -> Mapping[str, Any]:
     """
     Guess attributes from:
         input with an `attrs` attribute, or
-        input with an `attributes` attribute, 
+        input with an `attributes` attribute,
         or anything (returning {})
     """
-    if hasattr(data, 'attrs'):
+    if hasattr(data, "attrs"):
         return data.attrs
-    if hasattr(data, 'attributes'):
+    if hasattr(data, "attributes"):
         return data.attributes
     return {}
+
 
 def auto_fill_value(data: Any) -> Any:
     """
     Guess fill value from an input with a `fill_value` attribute, returning 0 otherwise.
     """
-    if hasattr(data, 'fill_value'):
+    if hasattr(data, "fill_value"):
         return data.fill_value
     return 0
+
 
 def auto_compresser(data: Any) -> Codec | None:
     """
     Guess compressor from an input with a `compressor` attribute, returning `None` otherwise.
     """
-    if hasattr(data, 'compressor'):
+    if hasattr(data, "compressor"):
         return data.compressor
     return None
 
-def auto_filters(data: Any)  -> list[Codec] | None:
+
+def auto_filters(data: Any) -> list[Codec] | None:
     """
     Guess filters from an input with a `filters` attribute, returning `None` otherwise.
     """
-    if hasattr(data, 'filters'):
+    if hasattr(data, "filters"):
         return data.filters
     return None
+
 
 def auto_order(data: Any) -> Literal["C", "F"]:
     """
     Guess array order from an input with an `order` attribute, returning "C" otherwise.
     """
-    if hasattr(data, 'order'):
+    if hasattr(data, "order"):
         return data.order
     return "C"
+
 
 def auto_dimension_separator(data: Any) -> Literal["/", "."]:
     """
