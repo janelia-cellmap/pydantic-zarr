@@ -1,7 +1,9 @@
 name: Build and publish Python 🐍 distributions 📦 to PyPI
 
-on: push
-
+on: 
+  push:
+    branches:
+      - main
 jobs:
     build-n-publish:
       name: Build and publish Python 🐍 distributions 📦 to PyPI
@@ -16,7 +18,7 @@ jobs:
             python-version: "3.x"
         - name: Set up poetry
           run: |
-            pip install poetry==1.5.1
+            pip install poetry==1.7.0
         - name: Build package
           run: |
             poetry build

@@ -6,7 +6,7 @@ on:
 permissions:
   contents: write
 jobs:
-  deploy:
+  docs-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -24,3 +24,56 @@ jobs:
             pip install poetry
             poetry install --with docs
             poetry run mkdocs gh-deploy --force
+  test:
+    name: test ${{ matrix.os }} / ${{ matrix.python-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu, macos, windows]
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11', '3.12']
+    env:
+      OS: ${{ matrix.os }}
+      DEPS: yes
+
+    runs-on: ${{ matrix.os }}-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: pdm-project/setup-pdm@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: true
+        allow-python-prereleases: true
+
+    - name: install deps
+      run: |
+        pdm venv create --with-pip --force $PYTHON
+        pdm install -G testing -G email
+
+    - run: pdm info && pdm list
+
+    - run: 'pdm run python -c "import pydantic.version; print(pydantic.version.version_info())"'
+
+    - run: mkdir coverage
+
+    - name: test without deps
+      run: make test
+      env:
+        COVERAGE_FILE: coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-without-deps
+        CONTEXT: ${{ runner.os }}-py${{ matrix.python-version }}-without-deps
+
+    - name: install extra deps
+      run: pdm install -G testing-extra -G email
+
+    - name: test with deps
+      run: make test
+      env:
+        COVERAGE_FILE: coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-with-deps
+        CONTEXT: ${{ runner.os }}-py${{ matrix.python-version }}-with-deps
+
+    - name: store coverage files
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage
+        path: coverage
