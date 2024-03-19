@@ -185,11 +185,9 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         attributes: Literal["auto"] | TAttr = "auto",
         fill_value: Literal["auto"] | int | float | None = "auto",
         order: Literal["auto", "C", "F"] = "auto",
-        filters: list[CodecDict] | None = "auto",
-        dimension_separator: Annotated[
-            Literal["/", "."], BeforeValidator(parse_dimension_separator)
-        ] = "auto",
-        compressor: CodecDict | None = "auto",
+        filters: Literal["auto"] | list[CodecDict] | None = "auto",
+        dimension_separator: Literal["auto", "/", "."] = "auto",
+        compressor: Literal["auto"] | CodecDict | None = "auto",
     ):
         """
         Create an `ArraySpec` from an array-like object. This is a convenience method for when Zarr array will be modelled from an existing array.
@@ -202,7 +200,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         array : an array-like object.
             Must have `shape` and `dtype` attributes.
             The `shape` and `dtype` of this object will be used to construct an `ArraySpec`.
-        attributes: "auto" | TAttr, default = "auto""
+        attributes: "auto" | TAttr, default = "auto"
             User-defined metadata associated with this array. Should be JSON-serializable. The default is "auto", which means that `array.attributes` will be used,
             with a fallback value of the empty dict `{}`.
         chunks: "auto" | tuple[int, ...], default = "auto"
