@@ -1,11 +1,11 @@
 from __future__ import annotations
+from typing_extensions import TypeAlias
 from typing import (
     Any,
     Dict,
     Literal,
     Mapping,
     Set,
-    TypeAlias,
     Union,
 )
 from pydantic import BaseModel, ConfigDict
