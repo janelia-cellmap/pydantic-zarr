@@ -325,6 +325,8 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         self,
         store: BaseStore,
         path: str,
+        *,
+        overwrite: bool = False,
         **kwargs,
     ) -> zarr.Array:
         """
@@ -337,6 +339,8 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
             The storage backend that will manifest the array.
         path : str
             The location of the array inside the store.
+        overwrite: bool, default = False
+            Whether to overwrite existing objects in storage to create the Zarr array.
         **kwargs : Any
             Additional keyword arguments are passed to `zarr.create`.
         Returns
@@ -346,9 +350,6 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         """
         spec_dict = self.model_dump()
         attrs = spec_dict.pop("attributes")
-        overwrite = kwargs.pop("overwrite", False)
-        if kwargs.get("mode", "r").startswith("w"):
-            raise ValueError("Mode='w' is not supported yet")
         if self.compressor is not None:
             spec_dict["compressor"] = numcodecs.get_codec(spec_dict["compressor"])
         if self.filters is not None:
@@ -522,7 +523,7 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
         result = cls(attributes=attributes, members=members)
         return result
 
-    def to_zarr(self, store: BaseStore, path: str, **kwargs):
+    def to_zarr(self, store: BaseStore, path: str, *, overwrite: bool = False, **kwargs):
         """
         Serialize this `GroupSpec` to a Zarr group at a specific path in a `zarr.BaseStore`.
         This operation will create metadata documents in the store.
@@ -532,10 +533,11 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
             The storage backend that will manifest the group and its contents.
         path : str
             The location of the group inside the store.
+        overwrite: bool, default = False
+            Whether to overwrite existing objects in storage to create the Zarr group.
         **kwargs : Any
             Additional keyword arguments that will be passed to `zarr.create` for creating
             sub-arrays.
-
         Returns
         -------
         zarr.Group
@@ -544,7 +546,6 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
         """
         spec_dict = self.model_dump(exclude={"members": True})
         attrs = spec_dict.pop("attributes")
-        overwrite = kwargs.pop("overwrite", False)
         if contains_group(store, path):
             extant_group = zarr.group(store, path=path)
             if not self.like(extant_group):
@@ -747,14 +748,9 @@ def from_zarr(
     if isinstance(element, zarr.Array):
         result = ArraySpec.from_zarr(element)
         return result
-    elif isinstance(element, zarr.Group):
-        result = GroupSpec.from_zarr(element, depth=depth)
-        return result
-    msg = (
-        f"Object of type {type(element)} cannot be processed by this function. "
-        "This function can only parse zarr.Group or zarr.Array"
-    )
-    raise TypeError(msg)
+
+    result = GroupSpec.from_zarr(element, depth=depth)
+    return result
 
 
 @overload
@@ -762,6 +758,8 @@ def to_zarr(
     spec: ArraySpec,
     store: BaseStore,
     path: str,
+    *,
+    overwrite: bool = False,
     **kwargs,
 ) -> zarr.Array:
     ...
@@ -772,6 +770,8 @@ def to_zarr(
     spec: GroupSpec,
     store: BaseStore,
     path: str,
+    *,
+    overwrite: bool = False,
     **kwargs,
 ) -> zarr.Group:
     ...
@@ -781,6 +781,8 @@ def to_zarr(
     spec: ArraySpec | GroupSpec,
     store: BaseStore,
     path: str,
+    *,
+    overwrite: bool = False,
     **kwargs,
 ) -> zarr.Array | zarr.Group:
     """
@@ -795,11 +797,10 @@ def to_zarr(
         The storage backend that will manifest the Zarr group or array modeled by `spec`.
     path : str
         The location of the Zarr group or array inside the store.
-    overwrite : bool
-        Whether to overwrite an existing array or group at the path. If overwrite is
-        `False` and a Zarr array or group already exists at `path`, an exception will be
-        raised. Defaults to `False`.
-
+    overwrite : bool, default = False
+        Whether to overwrite existing objects in storage to create the Zarr group or array.
+    **kwargs
+        Additional keyword arguments will be 
     Returns
     -------
     zarr.Array | zarr.Group
@@ -807,17 +808,7 @@ def to_zarr(
         This operation will create metadata documents in the store.
 
     """
-    if isinstance(spec, ArraySpec):
-        result = spec.to_zarr(store, path, **kwargs)
-    elif isinstance(spec, GroupSpec):
-        result = spec.to_zarr(store, path, **kwargs)
-    else:
-        msg = (
-            "Invalid argument for spec. Expected an instance of `GroupSpec` or ",
-            f"`ArraySpec`, got {type(spec)} instead.",
-        )
-        raise ValueError(msg)
-
+    result = spec.to_zarr(store, path, overwrite=overwrite, **kwargs)
     return result
 
 
