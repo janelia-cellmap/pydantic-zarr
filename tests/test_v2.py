@@ -1,8 +1,13 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any, Union
 from pydantic import ValidationError
 import pytest
 import zarr
 from zarr.errors import ContainsGroupError, ContainsArrayError
-from typing import Any, Literal, Union, Optional
+
+if TYPE_CHECKING:
+    from typing import Literal, Optional
+
 import numcodecs
 from numcodecs.abc import Codec
 from pydantic_zarr.v2 import (
