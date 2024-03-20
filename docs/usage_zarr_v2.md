@@ -6,7 +6,7 @@
 
 The `GroupSpec` and `ArraySpec` classes represent Zarr v2 groups and arrays, respectively. To create an instance of a `GroupSpec` or `ArraySpec` from an existing Zarr group or array, pass the Zarr group / array to the `.from_zarr` method defined on the `GroupSpec` / `ArraySpec` classes. This will result in a `pydantic-zarr` model of the Zarr object.
 
-Note that `GroupSpec.from_zarr(zarr_group)` will traverse the entire hierarchy under `zarr_group`. Future versions of this library may introduce a limit on the depth of this traversal: see [#2](https://github.com/d-v-b/pydantic-zarr/issues/2).
+>  By default `GroupSpec.from_zarr(zarr_group)` will traverse the entire hierarchy under `zarr_group`. This can be extremely slow if used on an extensive Zarr group on high latency storage. To limit the depth of traversal to a specific depth, use the `depth` keyword argument, e.g. `GroupSpec.from_zarr(zarr_group, depth=1)`
 
 Note that `from_zarr` will *not* read the data inside an array.
 
@@ -78,7 +78,7 @@ print(dict(group2['bar'].attrs))
 
 ### Creating from an array
 
-The `ArraySpec` class has a `from_array` static method that takes a numpy-array-like object and returns an `ArraySpec` with `shape` and `dtype` fields matching those of the array-like object.
+The `ArraySpec` class has a `from_array` static method that takes an array-like object and returns an `ArraySpec` with `shape` and `dtype` fields matching those of the array-like object.
 
 ```python
 from pydantic_zarr.v2 import ArraySpec
@@ -241,53 +241,64 @@ print(GroupSpec.from_flat(tree).model_dump())
 
 The `like` method works by converting both input models to `dict` via `pydantic.BaseModel.model_dump`, and comparing the `dict` representation of the models. This means that instances of two different subclasses of `GroupSpec`, which would not be considered equal according to the `==` operator, will be considered `like` if and only if they serialize to identical `dict` instances.
 
-The `like` method also takes keyword arguments `include` and `exclude`, which results in attributes being explicitly included or excluded from the model comparison. So it's possible to use `like` to check if two `ArraySpec` instances have the same `shape` and `dtype` by calling `array_a.like(array_b, include={'shape', 'dtype'})`. This is useful if you don't care about the compressor or filters and just want to ensure that you can safely write an in-memory array to a Zarr array.
+The `like` method takes keyword arguments `include` and `exclude`, which determine the attributes included or excluded from the model comparison. So it's possible to use `like` to check if two `ArraySpec` instances have the same `shape`, `dtype` and `chunks` by calling `array_a.like(array_b, include={'shape', 'dtype', 'chunks'})`. This is useful if you don't care about the compressor or filters and just want to ensure that you can safely write an in-memory array to a Zarr array, which depends just on the two arrays having matching `shape`, `dtype`, and `chunks` attributes.
 
 ```python
 from pydantic_zarr.v2 import ArraySpec, GroupSpec
 import zarr
 arr_a = ArraySpec(shape=(1,), dtype='uint8', chunks=(1,))
-arr_b = ArraySpec(shape=(2,), dtype='uint8', chunks=(1,)) # array with different shape
+# make an array with a different shape
+arr_b = ArraySpec(shape=(2,), dtype='uint8', chunks=(1,))
 
-print(arr_a.like(arr_b)) # False, because of mismatched shape
+# Returns False, because of mismatched shape
+print(arr_a.like(arr_b)) 
 #> False
 
-print(arr_a.like(arr_b, exclude={'shape'})) # True, because we exclude shape.
+# Returns True, because we exclude shape.
+print(arr_a.like(arr_b, exclude={'shape'}))
 #> True
 
 # `ArraySpec.like` will convert a zarr.Array to ArraySpec
 store = zarr.MemoryStore()
-arr_a_stored = arr_a.to_zarr(store, path='arr_a') # this is a zarr.Array
+# This is a zarr.Array
+arr_a_stored = arr_a.to_zarr(store, path='arr_a')
 
-print(arr_a.like(arr_a_stored)) # arr_a is like the zarr.Array version of itself
+# arr_a is like the zarr.Array version of itself
+print(arr_a.like(arr_a_stored)) 
 #> True
 
-print(arr_b.like(arr_a_stored)) # False, because of mismatched shape
+# Returns False, because of mismatched shape
+print(arr_b.like(arr_a_stored)) 
 #> False
 
-print(arr_b.like(arr_a_stored, exclude={'shape'})) # True, because we exclude shape.
+# Returns True, because we exclude shape.
+print(arr_b.like(arr_a_stored, exclude={'shape'}))
 #> True
 
-# the same thing thing for groups
+# The same thing, but for groups
 g_a = GroupSpec(attributes={'foo': 10}, members={'a': arr_a, 'b': arr_b})
 g_b = GroupSpec(attributes={'foo': 11}, members={'a': arr_a, 'b': arr_b})
 
-print(g_a.like(g_a)) # g_a is like itself
+# g_a is like itself
+print(g_a.like(g_a))
 #> True
 
-print(g_a.like(g_b)) # False, because of mismatched attributes
+# Returns False, because of mismatched attributes
+print(g_a.like(g_b)) 
 #> False
 
-print(g_a.like(g_b, exclude={'attributes'})) # True, because we ignore attributes
+# Returns True, because we ignore attributes
+print(g_a.like(g_b, exclude={'attributes'}))
 #> True
 
-print(g_a.like(g_a.to_zarr(store, path='g_a'))) # g_a is like its zarr.Group counterpart
+# g_a is like its zarr.Group counterpart
+print(g_a.like(g_a.to_zarr(store, path='g_a')))
 #> True
 ```
 
 ## Using generic types
 
-The following examples demonstrate how to specialize `GroupSpec` and `ArraySpec` with type parameters. By specializing `GroupSpec` or `ArraySpec` in this way, python type checkers and Pydantic can type-check elements of a Zarr hierarchy.
+This example shows how to specialize `GroupSpec` and `ArraySpec` with type parameters. By specializing `GroupSpec` or `ArraySpec` in this way, python type checkers and Pydantic can type-check elements of a Zarr hierarchy.
 
 ```python
 import sys
@@ -324,7 +335,7 @@ print(SpecificAttrsGroup(attributes={'a': 100, 'b': 100}))
 #> zarr_version=2 attributes={'a': 100, 'b': 100} members={}
 
 # a Zarr group that only contains arrays -- no subgroups!
-# we re-use the Tattributes type variable defined in pydantic_zarr.core
+# we re-use the TAttr type variable defined in pydantic_zarr.core
 ArraysOnlyGroup = GroupSpec[TAttr, ArraySpec]
 
 try:

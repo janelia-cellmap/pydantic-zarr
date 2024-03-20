@@ -1,21 +1,35 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any, Union
 from pydantic import ValidationError
 import pytest
 import zarr
 from zarr.errors import ContainsGroupError, ContainsArrayError
-from typing import Any, Literal, Union, Optional
+
+if TYPE_CHECKING:
+    from typing import Literal, Optional
+
 import numcodecs
 from numcodecs.abc import Codec
 from pydantic_zarr.v2 import (
     ArraySpec,
     GroupSpec,
+    auto_attributes,
+    auto_chunks,
+    auto_compresser,
+    auto_dimension_separator,
+    auto_fill_value,
+    auto_filters,
+    auto_order,
     to_flat,
     to_zarr,
     from_zarr,
     from_flat,
 )
+from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 import sys
+from numcodecs import GZip
 
 if sys.version_info < (3, 12):
     from typing_extensions import TypedDict
@@ -139,23 +153,118 @@ def test_array_spec(
     )
 
 
-@pytest.mark.parametrize("array", (np.arange(10), np.zeros((10, 10), dtype="uint8")))
-def test_array_spec_from_array(array: npt.NDArray[Any]):
-    spec = ArraySpec.from_array(array)
-    assert spec.dtype == array.dtype.str
-    assert np.dtype(spec.dtype) == array.dtype
-    assert spec.shape == array.shape
-    assert spec.chunks == array.shape
-    assert spec.attributes == {}
+@dataclass
+class FakeArray:
+    shape: tuple[int, ...]
+    dtype: tuple[int, ...]
 
-    attrs = {"foo": 10}
-    chunks = (1,) * array.ndim
-    spec2 = ArraySpec.from_array(array, attributes=attrs, chunks=chunks)
-    assert spec2.chunks == chunks
-    assert spec2.attributes == attrs
+
+@dataclass
+class WithAttrs:
+    attrs: dict[str, Any]
+
+
+@dataclass
+class WithChunksize:
+    chunksize: tuple[int, ...]
+
+
+@dataclass
+class FakeDaskArray(FakeArray, WithChunksize):
+    ...
+
+
+@dataclass
+class FakeXarray(FakeDaskArray, WithAttrs):
+    ...
+
+
+@pytest.mark.parametrize(
+    "array",
+    (
+        np.zeros((100), dtype="uint8"),
+        FakeArray(shape=(11,), dtype=np.dtype("float64")),
+        FakeDaskArray(shape=(22,), dtype=np.dtype("uint8"), chunksize=(11,)),
+        FakeXarray(
+            shape=(22,), dtype=np.dtype("uint8"), chunksize=(11,), attrs={"foo": "bar"}
+        ),
+    ),
+)
+@pytest.mark.parametrize("chunks", ("omit", "auto", (10,)))
+@pytest.mark.parametrize("attributes", ("omit", "auto", {"foo": 10}))
+@pytest.mark.parametrize("fill_value", ("omit", "auto", 15))
+@pytest.mark.parametrize("order", ("omit", "auto", "F"))
+@pytest.mark.parametrize("filters", ("omit", "auto", []))
+@pytest.mark.parametrize("dimension_separator", ("omit", "auto", "."))
+@pytest.mark.parametrize("compressor", ("omit", "auto", GZip().get_config()))
+def test_array_spec_from_array(
+    *,
+    array: npt.NDArray[Any],
+    chunks,
+    attributes,
+    fill_value,
+    order,
+    filters,
+    dimension_separator,
+    compressor,
+):
+    auto_options = ("omit", "auto")
+    kwargs_out = {}
+
+    kwargs_out["chunks"] = chunks
+    kwargs_out["attributes"] = attributes
+    kwargs_out["fill_value"] = fill_value
+    kwargs_out["order"] = order
+    kwargs_out["filters"] = filters
+    kwargs_out["dimension_separator"] = dimension_separator
+    kwargs_out["compressor"] = compressor
+
+    # remove all the keyword arguments that should be defaulted
+    kwargs_out = dict(filter(lambda kvp: kvp[1] != "omit", kwargs_out.items()))
+
+    spec = ArraySpec.from_array(array, **kwargs_out)
+    # arrayspec should round-trip from_array with no arguments
+    assert spec.from_array(spec) == spec
+
     assert spec.dtype == array.dtype.str
     assert np.dtype(spec.dtype) == array.dtype
+
     assert spec.shape == array.shape
+
+    if chunks in auto_options:
+        assert spec.chunks == auto_chunks(array)
+    else:
+        assert spec.chunks == chunks
+
+    if attributes in auto_options:
+        spec.attributes == auto_attributes(array)
+    else:
+        assert spec.attributes == attributes
+
+    if fill_value in auto_options:
+        assert spec.fill_value == auto_fill_value(array)
+    else:
+        assert spec.fill_value == fill_value
+
+    if order in auto_options:
+        assert spec.order == auto_order(array)
+    else:
+        assert spec.order == order
+
+    if filters in auto_options:
+        assert spec.filters == auto_filters(array)
+    else:
+        assert spec.filters == filters
+
+    if dimension_separator in auto_options:
+        assert spec.dimension_separator == auto_dimension_separator(array)
+    else:
+        assert spec.dimension_separator == dimension_separator
+
+    if compressor in auto_options:
+        assert spec.compressor == auto_compresser(array)
+    else:
+        assert spec.compressor == compressor
 
 
 @pytest.mark.parametrize("chunks", ((1,), (1, 2), ((1, 2, 3))))
