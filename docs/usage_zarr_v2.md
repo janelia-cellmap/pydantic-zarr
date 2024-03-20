@@ -6,7 +6,7 @@
 
 The `GroupSpec` and `ArraySpec` classes represent Zarr v2 groups and arrays, respectively. To create an instance of a `GroupSpec` or `ArraySpec` from an existing Zarr group or array, pass the Zarr group / array to the `.from_zarr` method defined on the `GroupSpec` / `ArraySpec` classes. This will result in a `pydantic-zarr` model of the Zarr object.
 
-Note that `GroupSpec.from_zarr(zarr_group)` will traverse the entire hierarchy under `zarr_group`. Future versions of this library may introduce a limit on the depth of this traversal: see [#2](https://github.com/d-v-b/pydantic-zarr/issues/2).
+>  By default `GroupSpec.from_zarr(zarr_group)` will traverse the entire hierarchy under `zarr_group`. This can be extremely slow if used on an extensive Zarr group on high latency storage. To limit the depth of traversal to a specific depth, use the `depth` keyword argument, e.g. `GroupSpec.from_zarr(zarr_group, depth=1)`
 
 Note that `from_zarr` will *not* read the data inside an array.
 
