@@ -171,8 +171,8 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         """
         if (lshape := len(self.shape)) != (lchunks := len(self.chunks)):
             msg = (
-                f"Length of shape must match length of chunks. Got {lshape} elements",
-                f"for shape and {lchunks} elements for chunks.",
+                f"Length of shape must match length of chunks. Got {lshape} elements "
+                f"for shape and {lchunks} elements for chunks."
             )
             raise ValueError(msg)
         return self
