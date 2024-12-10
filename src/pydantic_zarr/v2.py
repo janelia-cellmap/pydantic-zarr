@@ -119,6 +119,9 @@ class NodeSpec(StrictBase):
     zarr_version: Literal[2] = 2
 
 
+ArraySpecType = TypeVar("ArraySpecType", bound="ArraySpec")
+
+
 class ArraySpec(NodeSpec, Generic[TAttr]):
     """
     A model of a Zarr Version 2 Array. The specification for the data structure being modeled by
@@ -179,7 +182,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
 
     @classmethod
     def from_array(
-        cls,
+        cls: type[ArraySpecType],
         array: npt.NDArray[Any],
         chunks: Literal["auto"] | tuple[int, ...] = "auto",
         attributes: Literal["auto"] | TAttr = "auto",
@@ -188,7 +191,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         filters: Literal["auto"] | list[CodecDict] | None = "auto",
         dimension_separator: Literal["auto", "/", "."] = "auto",
         compressor: Literal["auto"] | CodecDict | None = "auto",
-    ):
+    ) -> ArraySpecType:
         """
         Create an `ArraySpec` from an array-like object. This is a convenience method for when Zarr array will be modelled from an existing array.
         This method takes nearly the same arguments as the `ArraySpec` constructor, minus `shape` and `dtype`, which will be inferred from the `array` argument.
@@ -275,7 +278,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
 
         return cls(
             shape=shape_actual,
-            dtype=dtype_actual,
+            dtype=dtype_actual.str,
             chunks=chunks_actual,
             attributes=attributes_actual,
             fill_value=fill_value_actual,
@@ -286,7 +289,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         )
 
     @classmethod
-    def from_zarr(cls, array: zarr.Array):
+    def from_zarr(cls: type[ArraySpecType], array: zarr.Array) -> ArraySpecType:
         """
         Create an `ArraySpec` from an instance of `zarr.Array`.
 
@@ -442,6 +445,9 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         return result
 
 
+GroupSpecType = TypeVar("GroupSpecType", bound="GroupSpec")
+
+
 class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
     """
     A model of a Zarr Version 2 Group.
@@ -466,8 +472,8 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
 
     @classmethod
     def from_zarr(
-        cls, group: zarr.Group, *, depth: int = -1
-    ) -> "GroupSpec[TAttr, TItem]":
+        cls: type[GroupSpecType], group: zarr.Group, *, depth: int = -1
+    ) -> GroupSpecType:
         """
         Create a GroupSpec from an instance of `zarr.Group`. Subgroups and arrays contained in the
         Zarr group will be converted to instances of `GroupSpec` and `ArraySpec`, respectively,
@@ -683,7 +689,9 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
         return to_flat(self, root_path=root_path)
 
     @classmethod
-    def from_flat(cls, data: Dict[str, ArraySpec | GroupSpec]):
+    def from_flat(
+        cls: type[GroupSpecType], data: Dict[str, ArraySpec | GroupSpec]
+    ) -> GroupSpecType:
         """
         Create a `GroupSpec` from a flat hierarchy representation. The flattened hierarchy is a
         `dict` with the following constraints: keys must be valid paths; values must
@@ -717,13 +725,11 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
 
 
 @overload
-def from_zarr(element: zarr.Group) -> GroupSpec:
-    ...
+def from_zarr(element: zarr.Group) -> GroupSpec: ...
 
 
 @overload
-def from_zarr(element: zarr.Array) -> ArraySpec:
-    ...
+def from_zarr(element: zarr.Array) -> ArraySpec: ...
 
 
 def from_zarr(
@@ -749,11 +755,9 @@ def from_zarr(
     """
 
     if isinstance(element, zarr.Array):
-        result = ArraySpec.from_zarr(element)
-        return result
-
-    result = GroupSpec.from_zarr(element, depth=depth)
-    return result
+        return ArraySpec.from_zarr(element)
+    else:
+        return GroupSpec.from_zarr(element, depth=depth)
 
 
 @overload
@@ -764,8 +768,7 @@ def to_zarr(
     *,
     overwrite: bool = False,
     **kwargs,
-) -> zarr.Array:
-    ...
+) -> zarr.Array: ...
 
 
 @overload
@@ -776,8 +779,7 @@ def to_zarr(
     *,
     overwrite: bool = False,
     **kwargs,
-) -> zarr.Group:
-    ...
+) -> zarr.Group: ...
 
 
 def to_zarr(
