@@ -11,11 +11,10 @@ This project is under flux -- I want to add [zarr version 3](https://zarr-specs.
 
 `pip install -U pydantic-zarr`
 
-## Help
+## Getting help
 
-
-See the [documentation](https://janelia-cellmap.github.io/pydantic-zarr/) for detailed information about this project. 
-
+- Docs: see the [documentation](https://janelia-cellmap.github.io/pydantic-zarr/) for detailed information about this project.
+- Chat: We use [Zulip](https://ossci.zulipchat.com/#narrow/channel/423692-Zarr) for project-related chat. 
 
 ## Example
 
