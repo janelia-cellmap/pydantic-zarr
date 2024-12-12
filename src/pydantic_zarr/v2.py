@@ -276,7 +276,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
 
         return cls(
             shape=shape_actual,
-            dtype=dtype_actual.str,
+            dtype=stringify_dtype(dtype_actual),
             chunks=chunks_actual,
             attributes=attributes_actual,
             fill_value=fill_value_actual,
