@@ -1,6 +1,6 @@
 # Usage (Zarr V2)
 
-## Reading and writing a zarr hieararchy
+## Reading and writing a zarr hierarchy
 
 ### Reading
 
