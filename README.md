@@ -58,4 +58,4 @@ print(spec.model_dump())
 """
 ```
 ## History
-This project was developed at [HHMI / Janelia Research Campus](https://www.janelia.org/). It was originally written by Davis Bennett to solve problems he encountered while working on the [Cellmap Project team](https://www.janelia.org/project-team/cellmap/members).
+This project was developed at [HHMI / Janelia Research Campus](https://www.janelia.org/). It was originally written by Davis Bennett to solve problems he encountered while working on the [Cellmap Project team](https://www.janelia.org/project-team/cellmap/members). In December of 2024 this project was migrated from the [`janelia-cellmap`](https://github.com/janelia-cellmap) github organization to [`zarr-developers`](https://github.com/zarr-developers) organization.
