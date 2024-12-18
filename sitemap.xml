@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://janelia-cellmap.github.io/pydantic-zarr/</loc>
+         <lastmod>2024-12-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://janelia-cellmap.github.io/pydantic-zarr/usage_zarr_v2/</loc>
+         <lastmod>2024-12-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://janelia-cellmap.github.io/pydantic-zarr/usage_zarr_v3/</loc>
+         <lastmod>2024-12-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://janelia-cellmap.github.io/pydantic-zarr/api/core/</loc>
+         <lastmod>2024-12-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://janelia-cellmap.github.io/pydantic-zarr/api/v2/</loc>
+         <lastmod>2024-12-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://janelia-cellmap.github.io/pydantic-zarr/api/v3/</loc>
+         <lastmod>2024-12-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+</urlset>
